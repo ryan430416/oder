@@ -2,6 +2,7 @@ import { auth } from "../auth.js";
 import { api } from "../api.js";
 import { qs } from "../nav.js";
 import { initI18n, t, storeLabel } from "../i18n.js";
+import { mountTimePick, mountIconPick } from "../easy-pick.js";
 
 initI18n();
 auth.requireRole("admin", "index.html");
@@ -11,9 +12,22 @@ const list = qs("#list");
 const msg = qs("#msg");
 const loginFields = qs("#loginFields");
 const submitBtn = qs("#submitBtn");
+const openPick = qs("#openPick");
+const closePick = qs("#closePick");
+const iconPick = qs("#iconPick");
+
+mountTimePick(openPick, { name: "open_time", value: "10:00", fallback: "10:00" });
+mountTimePick(closePick, { name: "close_time", value: "20:00", fallback: "20:00" });
+mountIconPick(iconPick, { name: "image", value: "🏪" });
 
 function fdObj(f) {
   return Object.fromEntries(new FormData(f).entries());
+}
+
+function resetPickers() {
+  openPick._set("10:00");
+  closePick._set("20:00");
+  iconPick._set("🏪");
 }
 
 async function render() {
@@ -64,6 +78,7 @@ form.addEventListener("submit", async (e) => {
   }
   form.reset();
   form.store_id.value = "";
+  resetPickers();
   loginFields.hidden = false;
   form.username.required = true;
   form.password.required = true;
@@ -81,9 +96,9 @@ list.addEventListener("click", async (e) => {
     form.store_id.value = s.store_id;
     form.store_name.value = s.store_name;
     form.description.value = s.description;
-    form.open_time.value = s.open_time;
-    form.close_time.value = s.close_time;
-    form.image.value = s.image;
+    openPick._set(s.open_time);
+    closePick._set(s.close_time);
+    iconPick._set(s.image);
     loginFields.hidden = true;
     form.username.required = false;
     form.password.required = false;

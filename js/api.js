@@ -6,6 +6,7 @@
 import { config } from "./config.js";
 import { auth } from "./auth.js";
 import { getDb, saveDb } from "./mock/db.js";
+import { toTime24 } from "./format.js";
 
 function delay(ms = 80) {
   return new Promise((r) => setTimeout(r, ms));
@@ -174,8 +175,8 @@ export const api = {
       store_id,
       store_name: String(payload.store_name || "").trim(),
       description: String(payload.description || "").trim(),
-      open_time: payload.open_time || "10:00",
-      close_time: payload.close_time || "20:00",
+      open_time: toTime24(payload.open_time, "10:00"),
+      close_time: toTime24(payload.close_time, "20:00"),
       status: payload.status === "closed" ? "closed" : "open",
       image: String(payload.image || "🏪").trim() || "🏪",
     };
@@ -203,8 +204,8 @@ export const api = {
     if (!store) return { ok: false, code: "no_store" };
     if (patch.store_name != null) store.store_name = String(patch.store_name).trim();
     if (patch.description != null) store.description = String(patch.description).trim();
-    if (patch.open_time != null) store.open_time = patch.open_time;
-    if (patch.close_time != null) store.close_time = patch.close_time;
+    if (patch.open_time != null) store.open_time = toTime24(patch.open_time, store.open_time);
+    if (patch.close_time != null) store.close_time = toTime24(patch.close_time, store.close_time);
     if (patch.image != null) store.image = String(patch.image).trim() || store.image;
     if (patch.status === "open" || patch.status === "closed") store.status = patch.status;
     saveDb(db);

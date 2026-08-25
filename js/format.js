@@ -22,6 +22,21 @@ export function formatTime(iso) {
   return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+export function toTime24(raw, fallback = "10:00") {
+  if (raw == null || raw === "") return fallback;
+  let s = String(raw).trim();
+  const am = /am|上午|เช้า/i.test(s);
+  const pm = /pm|下午|เย็น|บ่าย/i.test(s);
+  const m = s.match(/(\d{1,2})\s*[:.]\s*(\d{2})/);
+  if (!m) return fallback;
+  let h = Number(m[1]);
+  const min = m[2];
+  if (pm && h < 12) h += 12;
+  if (am && h === 12) h = 0;
+  if (h > 23) return fallback;
+  return String(h).padStart(2, "0") + ":" + min;
+}
+
 export function todaySlots() {
   const now = new Date();
   const slots = [];

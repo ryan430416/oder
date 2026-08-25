@@ -172,13 +172,66 @@
   margin: 10px 0 4px;
 }
 
-.login-form textarea,
-.login-form select {
+.login-form input {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
+}
+
+.easy-form label {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-top: 16px;
+}
+
+.easy-form input,
+.easy-form textarea,
+.easy-form select {
+  width: 100%;
+  font-size: 1.15rem;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   background: #fff;
+}
+
+.easy-time-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.easy-chips,
+.easy-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.easy-chip,
+.easy-icon {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.easy-icon {
+  font-size: 1.6rem;
+  min-width: 52px;
+}
+
+.easy-icon.on,
+.easy-chip:active {
+  border-color: var(--brand);
+  background: #ecfdf5;
+  font-weight: 700;
 }
 
 .hint {

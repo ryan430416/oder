@@ -19,18 +19,18 @@
   </header>
   <main class="wrap">
     <p class="sub" data-i18n="admin_stores_sub"></p>
-    <form class="card login-form" id="form">
+    <form class="card login-form easy-form" id="form">
       <input type="hidden" name="store_id" />
       <label data-i18n="form_store_name"></label>
       <input name="store_name" required />
       <label data-i18n="form_desc"></label>
       <textarea name="description" rows="2"></textarea>
       <label data-i18n="form_open"></label>
-      <input name="open_time" type="time" value="10:00" />
+      <div id="openPick"></div>
       <label data-i18n="form_close"></label>
-      <input name="close_time" type="time" value="20:00" />
+      <div id="closePick"></div>
       <label data-i18n="form_image"></label>
-      <input name="image" placeholder="🏪" />
+      <div id="iconPick"></div>
       <label data-i18n="form_staff"></label>
       <input name="staff_name" />
       <div id="loginFields">
