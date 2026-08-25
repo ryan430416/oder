@@ -22,6 +22,21 @@
   gap: 8px;
 }
 
+.home-link {
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--brand-dark);
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.topbar h1 a {
+  text-decoration: none;
+}
+
 .wrap {
   max-width: var(--max);
   margin: 0 auto;

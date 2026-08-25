@@ -172,11 +172,13 @@
   margin: 10px 0 4px;
 }
 
-.login-form input {
+.login-form textarea,
+.login-form select {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
+  background: #fff;
 }
 
 .hint {

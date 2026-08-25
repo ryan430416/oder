@@ -12,9 +12,37 @@
   <header class="topbar">
     <a class="btn btn-ghost" href="dashboard.html" data-i18n="back">返回</a>
     <h1 data-i18n="admin_products">餐點管理</h1>
-    <div class="topbar-actions"><div class="js-lang"></div></div>
+    <div class="topbar-actions">
+      <div class="js-lang"></div>
+      <a class="home-link" href="../index.html" data-i18n="home">首頁</a>
+    </div>
   </header>
-  <main class="wrap"><p class="sub" data-i18n="admin_soon">第一階段尚未實作。</p></main>
-  <script type="module" src="../js/pages/admin-placeholder.js"></script>
+  <main class="wrap">
+    <p class="sub" data-i18n="admin_products_sub"></p>
+    <label class="muted" data-i18n="pick_store"></label>
+    <select id="storePick" class="search"></select>
+    <form class="card login-form" id="form">
+      <input type="hidden" name="product_id" />
+      <label data-i18n="form_product_name"></label>
+      <input name="product_name" required />
+      <label data-i18n="form_category"></label>
+      <input name="category" />
+      <label data-i18n="form_desc"></label>
+      <textarea name="description" rows="2"></textarea>
+      <label data-i18n="form_price"></label>
+      <input name="price" type="number" min="0" step="1" required />
+      <label data-i18n="form_image"></label>
+      <input name="image" placeholder="🍽️" />
+      <label data-i18n="form_status"></label>
+      <select name="status">
+        <option value="active" data-i18n="listed"></option>
+        <option value="soldout" data-i18n="soldout"></option>
+      </select>
+      <p class="muted" id="msg"></p>
+      <button class="btn btn-block" type="submit" style="margin-top:12px" id="submitBtn" data-i18n="form_add_product"></button>
+    </form>
+    <div class="grid" id="list" style="margin-top:16px"></div>
+  </main>
+  <script type="module" src="../js/pages/admin-products.js"></script>
 </body>
 </html>

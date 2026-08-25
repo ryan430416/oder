@@ -7,17 +7,21 @@ import { createSeed } from "./data.js";
 
 export function getDb() {
   let db = storage.get(config.MOCK_DB_KEY, null);
-  if (!db) {
+  if (!db || db._v !== config.MOCK_DB_VERSION) {
     db = createSeed();
     storage.set(config.MOCK_DB_KEY, db);
+    storage.remove(config.CART_KEY);
+    storage.remove(config.SESSION_KEY);
   }
   return db;
 }
 
 export function saveDb(db) {
+  db._v = config.MOCK_DB_VERSION;
   storage.set(config.MOCK_DB_KEY, db);
 }
 
 export function resetDb() {
   storage.remove(config.MOCK_DB_KEY);
+  storage.remove(config.CART_KEY);
 }

@@ -15,6 +15,19 @@ function newId(prefix) {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
+function requireAdmin() {
+  const s = auth.getSession();
+  return s && s.role === "admin";
+}
+
+function nextStoreId(db) {
+  const nums = db.Stores.map((s) => parseInt(String(s.store_id).replace(/\D/g, ""), 10)).filter(
+    (n) => !Number.isNaN(n)
+  );
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  return "S" + String(next).padStart(3, "0");
+}
+
 export const api = {
   async getStores() {
     await delay();
@@ -145,4 +158,105 @@ export const api = {
     const db = getDb();
     return db.Orders.slice();
   },
+
+  async createStore(payload) {
+    await delay();
+    if (!requireAdmin()) return { ok: false, code: "not_admin" };
+    const db = getDb();
+    const username = String(payload.username || "").trim();
+    if (!username || !payload.password) return { ok: false, code: "bad_login" };
+    if (db.Accounts.some((a) => a.username === username)) {
+      return { ok: false, code: "username_taken" };
+    }
+    const store_id = nextStoreId(db);
+    const now = new Date().toISOString();
+    const store = {
+      store_id,
+      store_name: String(payload.store_name || "").trim(),
+      description: String(payload.description || "").trim(),
+      open_time: payload.open_time || "10:00",
+      close_time: payload.close_time || "20:00",
+      status: payload.status === "closed" ? "closed" : "open",
+      image: String(payload.image || "🏪").trim() || "🏪",
+    };
+    if (!store.store_name) return { ok: false, code: "need_store_name" };
+    const user_id = newId("user");
+    db.Stores.push(store);
+    db.Users.push({
+      user_id,
+      name: String(payload.staff_name || store.store_name).trim(),
+      role: "store",
+      store_id,
+      status: "active",
+      created_at: now,
+    });
+    db.Accounts.push({ username, password: String(payload.password), user_id });
+    saveDb(db);
+    return { ok: true, store, username };
+  },
+
+  async updateStore(storeId, patch) {
+    await delay();
+    if (!requireAdmin()) return { ok: false, code: "not_admin" };
+    const db = getDb();
+    const store = db.Stores.find((s) => s.store_id === storeId);
+    if (!store) return { ok: false, code: "no_store" };
+    if (patch.store_name != null) store.store_name = String(patch.store_name).trim();
+    if (patch.description != null) store.description = String(patch.description).trim();
+    if (patch.open_time != null) store.open_time = patch.open_time;
+    if (patch.close_time != null) store.close_time = patch.close_time;
+    if (patch.image != null) store.image = String(patch.image).trim() || store.image;
+    if (patch.status === "open" || patch.status === "closed") store.status = patch.status;
+    saveDb(db);
+    return { ok: true, store };
+  },
+
+  async createProduct(payload) {
+    await delay();
+    const session = auth.getSession();
+    if (!session) return { ok: false, code: "bad_login" };
+    let store_id = payload.store_id;
+    if (session.role === "store") store_id = auth.getBoundStoreId();
+    else if (session.role !== "admin") return { ok: false, code: "not_admin" };
+    if (!store_id) return { ok: false, code: "no_store" };
+    const db = getDb();
+    if (!db.Stores.some((s) => s.store_id === store_id)) return { ok: false, code: "no_store" };
+    const product_name = String(payload.product_name || "").trim();
+    if (!product_name) return { ok: false, code: "need_product_name" };
+    const product = {
+      product_id: newId("P"),
+      store_id,
+      category: String(payload.category || "").trim() || "—",
+      product_name,
+      description: String(payload.description || "").trim(),
+      price: Number(payload.price) || 0,
+      image: String(payload.image || "🍽️").trim() || "🍽️",
+      status: payload.status === "soldout" ? "soldout" : "active",
+    };
+    db.Products.push(product);
+    saveDb(db);
+    return { ok: true, product };
+  },
+
+  async updateProduct(productId, patch) {
+    await delay();
+    const session = auth.getSession();
+    const db = getDb();
+    const product = db.Products.find((p) => p.product_id === productId);
+    if (!product) return { ok: false, code: "no_product" };
+    if (session.role === "store") {
+      if (product.store_id !== auth.getBoundStoreId()) return { ok: false, code: "not_admin" };
+    } else if (session.role !== "admin") {
+      return { ok: false, code: "not_admin" };
+    }
+    if (patch.product_name != null) product.product_name = String(patch.product_name).trim();
+    if (patch.category != null) product.category = String(patch.category).trim();
+    if (patch.description != null) product.description = String(patch.description).trim();
+    if (patch.price != null) product.price = Number(patch.price) || 0;
+    if (patch.image != null) product.image = String(patch.image).trim() || product.image;
+    if (patch.status === "active" || patch.status === "soldout") product.status = patch.status;
+    saveDb(db);
+    return { ok: true, product };
+  },
 };
+

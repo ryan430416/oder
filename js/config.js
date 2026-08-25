@@ -10,4 +10,5 @@ export const config = {
   CART_KEY: "campus_order_cart",
   MOCK_DB_KEY: "campus_order_mock_db",
   LANG_KEY: "campus_order_lang",
+  MOCK_DB_VERSION: 2,
 };
