@@ -1,0 +1,17 @@
+.order-card h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.order-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.item-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 0.9rem;
+}

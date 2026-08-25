@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>結帳</title>
+  <link rel="stylesheet" href="../css/reset.css" />
+  <link rel="stylesheet" href="../css/layout.css" />
+  <link rel="stylesheet" href="../css/components.css" />
+  <link rel="stylesheet" href="../css/customer.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="btn btn-ghost" href="cart.html">返回</a>
+    <h1>結帳</h1>
+    <span></span>
+  </header>
+  <main class="wrap">
+    <div class="card checkout-block">
+      <strong>取餐時間</strong>
+      <select id="pickup" class="search" style="margin:10px 0 0"></select>
+    </div>
+    <div class="card checkout-block">
+      <strong>付款方式</strong>
+      <select id="pay" class="search" style="margin:10px 0 0">
+        <option value="cash">現場付款（取餐時）</option>
+        <option value="campus">校園儲值（示範）</option>
+      </select>
+    </div>
+    <div class="card checkout-block" id="summary"></div>
+    <button class="btn btn-block" id="confirm" type="button">確認下單</button>
+    <p class="muted" id="msg"></p>
+  </main>
+  <script type="module" src="../js/pages/customer-checkout.js"></script>
+</body>
+</html>

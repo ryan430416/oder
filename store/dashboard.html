@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>店家訂單</title>
+  <link rel="stylesheet" href="../css/reset.css" />
+  <link rel="stylesheet" href="../css/layout.css" />
+  <link rel="stylesheet" href="../css/components.css" />
+  <link rel="stylesheet" href="../css/store.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1 id="title">店家</h1>
+    <button class="btn btn-ghost" id="logout" type="button">登出</button>
+  </header>
+  <main class="wrap">
+    <p class="sub" id="bound"></p>
+    <div class="tabs" id="tabs"></div>
+    <div class="grid" id="list"></div>
+  </main>
+  <nav class="bottom-nav">
+    <a class="active" href="dashboard.html">訂單</a>
+    <a href="menu.html">菜單</a>
+  </nav>
+  <script type="module" src="../js/pages/store-dashboard.js"></script>
+</body>
+</html>

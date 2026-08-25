@@ -1,0 +1,47 @@
+.store-card {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  text-decoration: none;
+}
+
+.store-emoji {
+  font-size: 2rem;
+  text-align: center;
+}
+
+.product {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: start;
+}
+
+.product h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.product .price {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.cart-line {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.total-bar {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 12px 0;
+}
+
+.checkout-block {
+  margin-bottom: 14px;
+}

@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>店家菜單</title>
+  <link rel="stylesheet" href="../css/reset.css" />
+  <link rel="stylesheet" href="../css/layout.css" />
+  <link rel="stylesheet" href="../css/components.css" />
+  <link rel="stylesheet" href="../css/customer.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="btn btn-ghost" href="index.html">返回</a>
+    <h1 id="storeName">菜單</h1>
+    <a class="cart-fab" href="cart.html">🛒<span id="cartCount" class="cart-count" hidden>0</span></a>
+  </header>
+  <main class="wrap">
+    <p class="sub" id="storeDesc"></p>
+    <div class="tabs" id="cats"></div>
+    <div class="grid" id="menu"></div>
+  </main>
+  <nav class="bottom-nav">
+    <a href="index.html">店家</a>
+    <a href="cart.html">購物車</a>
+    <a href="orders.html">訂單</a>
+  </nav>
+  <script type="module" src="../js/pages/customer-store.js"></script>
+</body>
+</html>

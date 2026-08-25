@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>菜單管理</title>
+  <link rel="stylesheet" href="../css/reset.css" />
+  <link rel="stylesheet" href="../css/layout.css" />
+  <link rel="stylesheet" href="../css/components.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>菜單管理</h1>
+  </header>
+  <main class="wrap">
+    <p class="sub">第一階段僅顯示本店餐點（依登入 store_id 過濾）。售完／上下架將於下一階段補齊。</p>
+    <div class="grid" id="list"></div>
+  </main>
+  <nav class="bottom-nav">
+    <a href="dashboard.html">訂單</a>
+    <a class="active" href="menu.html">菜單</a>
+  </nav>
+  <script type="module" src="../js/pages/store-menu.js"></script>
+</body>
+</html>
