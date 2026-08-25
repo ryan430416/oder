@@ -34,10 +34,10 @@ export const auth = {
     const acc = db.Accounts.find(
       (a) => a.username === username.trim() && a.password === password
     );
-    if (!acc) return { ok: false, message: "帳號或密碼錯誤" };
+    if (!acc) return { ok: false, code: "bad_login" };
     const user = db.Users.find((u) => u.user_id === acc.user_id);
     if (!user || user.status !== "active") {
-      return { ok: false, message: "帳號已停用" };
+      return { ok: false, code: "disabled" };
     }
     const session = {
       user_id: user.user_id,

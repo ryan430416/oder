@@ -1,9 +1,8 @@
 import { auth } from "../auth.js";
+import { initI18n } from "../i18n.js";
 
-const s = auth.requireRole("admin", "index.html");
-if (!s) {
-  /* redirect */
-}
+initI18n();
+auth.requireRole("admin", "index.html");
 
 const logout = document.getElementById("logout");
 if (logout) {

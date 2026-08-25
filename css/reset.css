@@ -1,3 +1,5 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;600;700&family=Noto+Sans+TC:wght@400;600;700&family=Noto+Sans+Thai:wght@400;600;700&display=swap");
+
 :root {
   --bg: #f4f1ea;
   --surface: #fffdf8;
@@ -28,7 +30,7 @@ body {
 }
 
 body {
-  font-family: "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  font-family: "Noto Sans TC", "Noto Sans Thai", "Noto Sans Myanmar", "Segoe UI", "Microsoft JhengHei", sans-serif;
   background: var(--bg);
   color: var(--ink);
   line-height: 1.45;

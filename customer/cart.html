@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>購物車</title>
+  <title data-i18n="cart">購物車</title>
   <link rel="stylesheet" href="../css/reset.css" />
   <link rel="stylesheet" href="../css/layout.css" />
   <link rel="stylesheet" href="../css/components.css" />
@@ -11,20 +11,20 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="btn btn-ghost" href="index.html">繼續點</a>
-    <h1>購物車</h1>
-    <span></span>
+    <a class="btn btn-ghost" href="index.html" data-i18n="keep_ordering">繼續點</a>
+    <h1 data-i18n="cart">購物車</h1>
+    <div class="topbar-actions"><div class="js-lang"></div></div>
   </header>
   <main class="wrap">
     <p class="sub" id="storeHint"></p>
     <div class="grid" id="lines"></div>
-    <div class="total-bar"><span>總金額</span><span id="total">NT$ 0</span></div>
-    <a class="btn btn-block" id="goCheckout" href="checkout.html">去結帳</a>
+    <div class="total-bar"><span data-i18n="total">總金額</span><span id="total">NT$ 0</span></div>
+    <a class="btn btn-block" id="goCheckout" href="checkout.html" data-i18n="checkout">去結帳</a>
   </main>
   <nav class="bottom-nav">
-    <a href="index.html">店家</a>
-    <a class="active" href="cart.html">購物車</a>
-    <a href="orders.html">訂單</a>
+    <a href="index.html" data-i18n="nav_stores">店家</a>
+    <a class="active" href="cart.html" data-i18n="nav_cart">購物車</a>
+    <a href="orders.html" data-i18n="nav_orders">訂單</a>
   </nav>
   <script type="module" src="../js/pages/customer-cart.js"></script>
 </body>

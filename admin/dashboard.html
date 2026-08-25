@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>管理 Dashboard</title>
+  <title data-i18n="admin_dash">管理後台</title>
   <link rel="stylesheet" href="../css/reset.css" />
   <link rel="stylesheet" href="../css/layout.css" />
   <link rel="stylesheet" href="../css/components.css" />
@@ -11,18 +11,21 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>管理後台</h1>
-    <button class="btn btn-ghost" id="logout" type="button">登出</button>
+    <h1 data-i18n="admin_dash">管理後台</h1>
+    <div class="topbar-actions">
+      <div class="js-lang"></div>
+      <button class="btn btn-ghost" id="logout" type="button" data-i18n="logout">登出</button>
+    </div>
   </header>
   <main class="wrap">
-    <p class="sub">第一階段空殼：功能頁尚未實作，資料結構已預留。</p>
+    <p class="sub" data-i18n="admin_sub">第一階段空殼</p>
     <nav class="admin-nav">
-      <a class="card" href="stores.html">店家管理</a>
-      <a class="card" href="products.html">餐點管理</a>
-      <a class="card" href="orders.html">全部訂單</a>
-      <a class="card" href="users.html">使用者管理</a>
-      <a class="card" href="reviews.html">評價管理</a>
-      <a class="card" href="analytics.html">數據統計</a>
+      <a class="card" href="stores.html" data-i18n="admin_stores">店家管理</a>
+      <a class="card" href="products.html" data-i18n="admin_products">餐點管理</a>
+      <a class="card" href="orders.html" data-i18n="admin_orders">全部訂單</a>
+      <a class="card" href="users.html" data-i18n="admin_users">使用者管理</a>
+      <a class="card" href="reviews.html" data-i18n="admin_reviews">評價管理</a>
+      <a class="card" href="analytics.html" data-i18n="admin_analytics">數據統計</a>
     </nav>
   </main>
   <script type="module" src="../js/pages/admin-placeholder.js"></script>

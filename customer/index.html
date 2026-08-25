@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>合作店家</title>
+  <title data-i18n="partner_stores">合作店家</title>
   <link rel="stylesheet" href="../css/reset.css" />
   <link rel="stylesheet" href="../css/layout.css" />
   <link rel="stylesheet" href="../css/components.css" />
@@ -11,21 +11,22 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>校園點餐</h1>
+    <h1 data-i18n="brand">校園點餐</h1>
     <div class="topbar-actions">
-      <a class="cart-fab" href="cart.html" aria-label="購物車">🛒<span id="cartCount" class="cart-count" hidden>0</span></a>
+      <div class="js-lang"></div>
+      <a class="cart-fab" href="cart.html" data-i18n-aria="nav_cart">🛒<span id="cartCount" class="cart-count" hidden>0</span></a>
     </div>
   </header>
   <main class="wrap">
-    <h2 class="page-title">合作店家</h2>
+    <h2 class="page-title" data-i18n="partner_stores">合作店家</h2>
     <p class="sub" id="who"></p>
-    <input class="search" id="search" type="search" placeholder="搜尋店家名稱" />
+    <input class="search" id="search" type="search" data-i18n-placeholder="search_store" placeholder="搜尋店家名稱" />
     <div class="grid" id="list"></div>
   </main>
   <nav class="bottom-nav">
-    <a class="active" href="index.html">店家</a>
-    <a href="cart.html">購物車</a>
-    <a href="orders.html">訂單</a>
+    <a class="active" href="index.html" data-i18n="nav_stores">店家</a>
+    <a href="cart.html" data-i18n="nav_cart">購物車</a>
+    <a href="orders.html" data-i18n="nav_orders">訂單</a>
   </nav>
   <script type="module" src="../js/pages/customer-home.js"></script>
 </body>

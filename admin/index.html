@@ -3,24 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>管理登入</title>
+  <title data-i18n="admin_login">系統管理</title>
   <link rel="stylesheet" href="../css/reset.css" />
   <link rel="stylesheet" href="../css/layout.css" />
   <link rel="stylesheet" href="../css/components.css" />
 </head>
 <body>
   <div class="portal">
-    <h1>系統管理</h1>
+    <div class="js-lang"></div>
+    <h1 data-i18n="admin_login">系統管理</h1>
     <form class="login-form" id="form">
-      <label>帳號</label>
+      <label data-i18n="username">帳號</label>
       <input name="username" required />
-      <label>密碼</label>
+      <label data-i18n="password">密碼</label>
       <input name="password" type="password" required />
       <p class="muted" id="err"></p>
-      <button class="btn btn-block" type="submit" style="margin-top:16px">登入</button>
+      <button class="btn btn-block" type="submit" style="margin-top:16px" data-i18n="login">登入</button>
     </form>
-    <div class="hint">admin / 1234。此端第一階段為空殼，僅驗證角色。</div>
-    <p><a href="../index.html">回入口</a></p>
+    <div class="hint" data-i18n="admin_hint">admin / 1234</div>
+    <p><a href="../index.html" data-i18n="back_home">回入口</a></p>
   </div>
   <script type="module" src="../js/pages/admin-login.js"></script>
 </body>

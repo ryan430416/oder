@@ -3,7 +3,9 @@ import { api } from "../api.js";
 import { cart } from "../cart.js";
 import { money, todaySlots } from "../format.js";
 import { qs } from "../nav.js";
+import { initI18n, t, storeLabel, productLabel } from "../i18n.js";
 
+initI18n();
 const session = auth.ensureCustomer();
 const c = cart.get();
 if (!c.items.length) location.href = "cart.html";
@@ -17,13 +19,14 @@ todaySlots().forEach((s) => {
   pickup.appendChild(opt);
 });
 
+const storeName = store ? storeLabel(store).name : c.store_id;
 qs("#summary").innerHTML = `
-  <strong>訂單內容</strong>
-  <p class="muted">${store ? store.store_name : c.store_id}</p>
+  <strong>${t("order_content")}</strong>
+  <p class="muted">${storeName}</p>
   <ul class="item-list">
-    ${c.items.map((i) => `<li>${i.product_name} × ${i.quantity}　${money(i.unit_price * i.quantity)}</li>`).join("")}
+    ${c.items.map((i) => `<li>${productLabel(i.product_id, i.product_name)} × ${i.quantity}　${money(i.unit_price * i.quantity)}</li>`).join("")}
   </ul>
-  <p><strong>合計 ${money(cart.total())}</strong></p>
+  <p><strong>${t("sum", { amount: money(cart.total()) })}</strong></p>
 `;
 
 qs("#confirm").addEventListener("click", async () => {
@@ -37,10 +40,10 @@ qs("#confirm").addEventListener("click", async () => {
   });
   if (res.ok) {
     cart.clear();
-    qs("#msg").textContent = "已建立訂單 " + res.order.order_id;
+    qs("#msg").textContent = t("order_created", { id: res.order.order_id });
     location.href = "orders.html";
   } else {
-    qs("#msg").textContent = "下單失敗";
+    qs("#msg").textContent = t("order_fail");
     qs("#confirm").disabled = false;
   }
 });

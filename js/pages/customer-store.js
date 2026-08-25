@@ -3,7 +3,9 @@ import { api } from "../api.js";
 import { cart } from "../cart.js";
 import { money } from "../format.js";
 import { qs } from "../nav.js";
+import { initI18n, t, storeLabel, productLabel, productDesc, categoryLabel } from "../i18n.js";
 
+initI18n();
 auth.ensureCustomer();
 
 const params = new URLSearchParams(location.search);
@@ -13,8 +15,9 @@ if (!store) {
   location.href = "index.html";
 }
 
-qs("#storeName").textContent = store.store_name;
-qs("#storeDesc").textContent = `${store.description} · ${store.open_time}–${store.close_time}`;
+const lab = storeLabel(store);
+qs("#storeName").textContent = lab.name;
+qs("#storeDesc").textContent = `${lab.desc} · ${store.open_time}–${store.close_time}`;
 
 function refreshBadge() {
   const n = cart.count();
@@ -24,32 +27,36 @@ function refreshBadge() {
 refreshBadge();
 
 const products = await api.getProducts(storeId);
-const cats = ["全部", ...new Set(products.map((p) => p.category))];
-let cat = "全部";
+const ALL = "__all__";
+const cats = [ALL, ...new Set(products.map((p) => p.category))];
+let cat = ALL;
 
 const catsEl = qs("#cats");
 const menuEl = qs("#menu");
 
 function drawCats() {
   catsEl.innerHTML = cats
-    .map((c) => `<button type="button" data-cat="${c}" class="${c === cat ? "on" : ""}">${c}</button>`)
+    .map((c) => {
+      const label = c === ALL ? t("cat_all") : categoryLabel(c);
+      return `<button type="button" data-cat="${c}" class="${c === cat ? "on" : ""}">${label}</button>`;
+    })
     .join("");
 }
 
 function drawMenu() {
-  const rows = products.filter((p) => cat === "全部" || p.category === cat);
+  const rows = products.filter((p) => cat === ALL || p.category === cat);
   menuEl.innerHTML = rows
     .map((p) => {
       const sold = p.status !== "active";
       return `
       <article class="card product">
         <div>
-          <h3>${p.image} ${p.product_name}</h3>
-          <div class="muted">${p.description}</div>
+          <h3>${p.image} ${productLabel(p.product_id, p.product_name)}</h3>
+          <div class="muted">${productDesc(p.product_id, p.description)}</div>
           <div class="price">${money(p.price)}</div>
-          ${sold ? '<span class="badge sold">售完</span>' : ""}
+          ${sold ? `<span class="badge sold">${t("soldout")}</span>` : ""}
         </div>
-        <button class="btn" data-add="${p.product_id}" ${sold ? "disabled" : ""}>加入</button>
+        <button class="btn" data-add="${p.product_id}" ${sold ? "disabled" : ""}>${t("add")}</button>
       </article>`;
     })
     .join("");
@@ -69,7 +76,7 @@ menuEl.addEventListener("click", (e) => {
   const product = products.find((p) => p.product_id === btn.dataset.add);
   const result = cart.add(product, 1);
   if (!result.ok && result.code === "OTHER_STORE") {
-    if (confirm("購物車已有其他店家商品，是否清空並加入此店？")) {
+    if (confirm(t("other_store"))) {
       cart.clear();
       cart.add(product, 1);
     } else return;
