@@ -6,9 +6,11 @@ import { qs } from "../nav.js";
 import { initI18n, t, storeLabel, productLabel } from "../i18n.js";
 
 initI18n();
-const session = auth.ensureCustomer();
+let session = auth.ensureCustomer();
 const c = cart.get();
 if (!c.items.length) location.href = "cart.html";
+
+qs("#custName").value = session.name && session.name !== "學生小明" ? session.name : "";
 
 const store = await api.getStore(c.store_id);
 const pickup = qs("#pickup");
@@ -30,9 +32,16 @@ qs("#summary").innerHTML = `
 `;
 
 qs("#confirm").addEventListener("click", async () => {
+  const named = auth.setCustomerName(qs("#custName").value);
+  if (!named.ok) {
+    qs("#msg").textContent = t(named.code);
+    return;
+  }
+  session = named.session;
   qs("#confirm").disabled = true;
   const res = await api.createOrder({
     customer_id: session.user_id,
+    customer_name: session.name,
     store_id: c.store_id,
     pickup_time: pickup.value,
     payment_method: qs("#pay").value,
@@ -43,7 +52,7 @@ qs("#confirm").addEventListener("click", async () => {
     qs("#msg").textContent = t("order_created", { id: res.order.order_id });
     location.href = "orders.html";
   } else {
-    qs("#msg").textContent = t("order_fail");
+    qs("#msg").textContent = t(res.code || "order_fail");
     qs("#confirm").disabled = false;
   }
 });

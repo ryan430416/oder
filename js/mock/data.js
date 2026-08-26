@@ -22,5 +22,7 @@ export function createSeed() {
     Orders: [],
     OrderItems: [],
     Reviews: [],
+    Notifications: [],
+    PasswordResets: [],
   };
 }

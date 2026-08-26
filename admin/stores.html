@@ -14,6 +14,7 @@
     <h1 data-i18n="admin_stores">店家管理</h1>
     <div class="topbar-actions">
       <div class="js-lang"></div>
+      <button class="btn btn-ghost" id="logout" type="button" data-i18n="logout">登出</button>
       <a class="home-link" href="../index.html" data-i18n="home">首頁</a>
     </div>
   </header>
@@ -31,8 +32,11 @@
       <div id="closePick"></div>
       <label data-i18n="form_image"></label>
       <div id="iconPick"></div>
-      <label data-i18n="form_staff"></label>
-      <input name="staff_name" />
+      <div id="resetBox" hidden>
+        <label data-i18n="new_password"></label>
+        <input name="new_password" type="password" autocomplete="new-password" />
+        <button class="btn btn-ghost btn-block" type="button" id="resetPw" style="margin-top:8px" data-i18n="reset_pw"></button>
+      </div>
       <div id="loginFields">
         <label data-i18n="store_login_acc"></label>
         <input name="username" autocomplete="off" />
@@ -41,6 +45,7 @@
       </div>
       <p class="muted" id="msg"></p>
       <button class="btn btn-block" type="submit" style="margin-top:12px" id="submitBtn" data-i18n="form_add_store"></button>
+      <button class="btn btn-ghost btn-block" type="button" id="cancelEdit" hidden data-i18n="cancel_edit"></button>
     </form>
     <div class="grid" id="list" style="margin-top:16px"></div>
   </main>

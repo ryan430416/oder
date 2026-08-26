@@ -13,6 +13,8 @@ export function getDb() {
     storage.remove(config.CART_KEY);
     storage.remove(config.SESSION_KEY);
   }
+  if (!Array.isArray(db.Notifications)) db.Notifications = [];
+  if (!Array.isArray(db.PasswordResets)) db.PasswordResets = [];
   return db;
 }
 

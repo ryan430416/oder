@@ -53,3 +53,18 @@ export function todaySlots() {
   }
   return slots;
 }
+
+/** 本地日期 YYYY-MM-DD，供每日訂單歷史 */
+export function dateKey(iso) {
+  const d = iso ? new Date(iso) : new Date();
+  if (Number.isNaN(d.getTime())) return "";
+  const p = (x) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+export function formatDate(iso) {
+  const k = dateKey(iso);
+  if (!k) return "—";
+  const [y, m, d] = k.split("-");
+  return `${Number(m)}/${Number(d)} (${y})`;
+}

@@ -4,7 +4,7 @@
  */
 import { config } from "./config.js";
 import { storage } from "./storage.js";
-import { getDb } from "./mock/db.js";
+import { getDb, saveDb } from "./mock/db.js";
 
 export const auth = {
   getSession() {
@@ -26,7 +26,9 @@ export const auth = {
   getBoundStoreId() {
     const s = this.getSession();
     if (!s || s.role !== "store") return "";
-    return s.store_id || "";
+    if (s.store_id) return s.store_id;
+    const user = getDb().Users.find((u) => u.user_id === s.user_id);
+    return (user && user.store_id) || "";
   },
 
   login(username, password) {
@@ -53,19 +55,37 @@ export const auth = {
     storage.remove(config.SESSION_KEY);
   },
 
-  /** 顧客端：未登入則自動使用示範學生帳號，方便第一階段體驗 */
+  /** 顧客端：沒登入才用示範學生。管理員／店家進顧客頁時不覆蓋原登入 */
   ensureCustomer() {
-    let s = this.getSession();
+    const s = this.getSession();
     if (s && s.role === "customer") return s;
     const db = getDb();
     const user = db.Users.find((u) => u.user_id === "user_c001");
-    const session = {
+    const guest = {
       user_id: user.user_id,
       name: user.name,
       role: "customer",
       store_id: "",
     };
+    if (s && (s.role === "admin" || s.role === "store")) return guest;
+    storage.set(config.SESSION_KEY, guest);
+    return guest;
+  },
+
+  setCustomerName(name) {
+    const n = String(name || "").trim();
+    if (!n) return { ok: false, code: "need_name" };
+    const live = this.getSession();
+    if (live && (live.role === "admin" || live.role === "store")) {
+      return { ok: true, session: { user_id: "user_c001", name: n, role: "customer", store_id: "" } };
+    }
+    const s = this.ensureCustomer();
+    const db = getDb();
+    const user = db.Users.find((u) => u.user_id === s.user_id);
+    if (user) user.name = n;
+    saveDb(db);
+    const session = { ...s, name: n, role: "customer" };
     storage.set(config.SESSION_KEY, session);
-    return session;
+    return { ok: true, session };
   },
 };

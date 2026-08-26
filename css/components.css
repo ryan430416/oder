@@ -127,6 +127,31 @@
   gap: 8px;
 }
 
+.qty input[type="number"] {
+  width: 72px;
+  text-align: center;
+  font-size: 1.15rem;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.bell {
+  position: relative;
+  text-decoration: none;
+  font-size: 1.2rem;
+}
+
+.name-row {
+  display: flex;
+  gap: 8px;
+  align-items: end;
+}
+
+.name-row input {
+  flex: 1;
+}
+
 .qty button {
   width: 32px;
   height: 32px;

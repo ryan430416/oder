@@ -6,4 +6,18 @@
 
 .admin-nav a {
   text-decoration: none;
+  font-weight: 700;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stat-grid .card strong {
+  display: block;
+  font-size: 1.4rem;
+  margin-top: 4px;
 }

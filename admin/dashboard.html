@@ -14,12 +14,14 @@
     <h1 data-i18n="admin_dash">管理後台</h1>
     <div class="topbar-actions">
       <div class="js-lang"></div>
+      <span id="bellHost"></span>
       <button class="btn btn-ghost" id="logout" type="button" data-i18n="logout">登出</button>
       <a class="home-link" href="../index.html" data-i18n="home">首頁</a>
     </div>
   </header>
   <main class="wrap">
-    <p class="sub" data-i18n="admin_sub">第一階段空殼</p>
+    <p class="sub" data-i18n="admin_sub"></p>
+    <div class="stat-grid" id="stats"></div>
     <nav class="admin-nav">
       <a class="card" href="stores.html" data-i18n="admin_stores">店家管理</a>
       <a class="card" href="products.html" data-i18n="admin_products">餐點管理</a>
@@ -29,6 +31,6 @@
       <a class="card" href="analytics.html" data-i18n="admin_analytics">數據統計</a>
     </nav>
   </main>
-  <script type="module" src="../js/pages/admin-placeholder.js"></script>
+  <script type="module" src="../js/pages/admin-dashboard.js"></script>
 </body>
 </html>

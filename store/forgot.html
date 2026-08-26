@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title data-i18n="forgot_title">忘記密碼</title>
+  <link rel="stylesheet" href="../css/reset.css" />
+  <link rel="stylesheet" href="../css/layout.css" />
+  <link rel="stylesheet" href="../css/components.css" />
+</head>
+<body>
+  <div class="portal">
+    <div class="js-lang"></div>
+    <h1 data-i18n="forgot_title"></h1>
+    <p class="sub" data-i18n="forgot_hint"></p>
+    <form class="login-form" id="form">
+      <label data-i18n="username"></label>
+      <input name="username" required />
+      <p class="muted" id="msg"></p>
+      <button class="btn btn-block" type="submit" style="margin-top:16px" data-i18n="forgot_pw"></button>
+    </form>
+    <p><a href="index.html" data-i18n="back"></a></p>
+  </div>
+  <script type="module" src="../js/pages/store-forgot.js"></script>
+</body>
+</html>

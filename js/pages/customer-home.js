@@ -3,14 +3,21 @@ import { api } from "../api.js";
 import { cart } from "../cart.js";
 import { qs } from "../nav.js";
 import { initI18n, t, storeLabel } from "../i18n.js";
+import { mountBell } from "../notify-ui.js";
 
 initI18n();
-auth.ensureCustomer();
-const session = auth.getSession();
+const session = auth.ensureCustomer();
 qs("#who").textContent = t("who", { name: session.name });
-
+qs("#custName").value = session.name === "學生小明" ? "" : session.name;
 qs("#cartCount").textContent = cart.count();
 qs("#cartCount").hidden = cart.count() === 0;
+mountBell(qs("#bellHost"), "notifications.html");
+
+qs("#saveName").addEventListener("click", () => {
+  const res = auth.setCustomerName(qs("#custName").value);
+  qs("#nameMsg").textContent = res.ok ? t("name_saved") : t(res.code);
+  if (res.ok) qs("#who").textContent = t("who", { name: res.session.name });
+});
 
 const listEl = qs("#list");
 let stores = [];

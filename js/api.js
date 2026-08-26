@@ -16,6 +16,16 @@ function newId(prefix) {
   return prefix + "_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
+function addNote(db, payload) {
+  if (!Array.isArray(db.Notifications)) db.Notifications = [];
+  db.Notifications.unshift({
+    notification_id: newId("N"),
+    read: false,
+    created_at: new Date().toISOString(),
+    ...payload,
+  });
+}
+
 function requireAdmin() {
   const s = auth.getSession();
   return s && s.role === "admin";
@@ -55,7 +65,7 @@ export const api = {
     return getDb().Products.filter((p) => p.store_id === storeId);
   },
 
-  async createOrder({ customer_id, store_id, pickup_time, payment_method, items }) {
+  async createOrder({ customer_id, customer_name, store_id, pickup_time, payment_method, items }) {
     await delay();
     if (!config.USE_MOCK) {
       const res = await fetch(config.API_BASE_URL, {
@@ -63,6 +73,7 @@ export const api = {
         body: JSON.stringify({
           action: "createOrder",
           customer_id,
+          customer_name,
           store_id,
           pickup_time,
           payment_method,
@@ -71,6 +82,8 @@ export const api = {
       });
       return res.json();
     }
+    const name = String(customer_name || "").trim();
+    if (!name) return { ok: false, code: "need_name" };
     const db = getDb();
     const order_id = newId("ORD");
     const now = new Date().toISOString();
@@ -95,6 +108,7 @@ export const api = {
       order_id,
       store_id,
       customer_id,
+      customer_name: name,
       pickup_time,
       total,
       payment_method,
@@ -104,6 +118,13 @@ export const api = {
     };
     db.Orders.push(order);
     db.OrderItems.push(...orderItems);
+    addNote(db, {
+      role: "store",
+      store_id,
+      order_id,
+      key: "notice_new_order",
+      vars: { name, id: order_id },
+    });
     saveDb(db);
     return { ok: true, order, items: orderItems };
   },
@@ -148,16 +169,147 @@ export const api = {
     }
     order.status = nextStatus;
     order.updated_at = new Date().toISOString();
+    addNote(db, {
+      role: "customer",
+      user_id: order.customer_id,
+      store_id: order.store_id,
+      order_id: order.order_id,
+      key: "notice_status",
+      vars: { id: order.order_id, status: nextStatus },
+    });
     saveDb(db);
     return { ok: true, order };
   },
 
-  async getAdminOrders() {
+  async cancelOrder(orderId) {
     await delay();
     const session = auth.getSession();
-    if (!session || session.role !== "admin") return [];
     const db = getDb();
-    return db.Orders.slice();
+    const order = db.Orders.find((o) => o.order_id === orderId);
+    if (!order) return { ok: false, code: "no_product" };
+    const done = ["completed", "cancelled", "rejected"].includes(order.status);
+    if (done) return { ok: false, code: "cannot_cancel" };
+    const isAdmin = session && session.role === "admin";
+    const isStore = session && session.role === "store" && order.store_id === auth.getBoundStoreId();
+    const isCust = session && session.role === "customer" && order.customer_id === session.user_id;
+    const guest = auth.ensureCustomer();
+    const isGuestCust = guest.user_id === order.customer_id && (!session || session.role === "customer");
+    if (!isAdmin && !isStore && !isCust && !isGuestCust) return { ok: false, code: "cannot_cancel" };
+    if (session && session.role === "customer" && !["pending", "accepted"].includes(order.status)) {
+      return { ok: false, code: "cannot_cancel" };
+    }
+    order.status = "cancelled";
+    order.updated_at = new Date().toISOString();
+    if (isStore || isAdmin) {
+      addNote(db, {
+        role: "customer",
+        user_id: order.customer_id,
+        store_id: order.store_id,
+        order_id: order.order_id,
+        key: "notice_cancel",
+        vars: { id: order.order_id },
+      });
+    } else {
+      addNote(db, {
+        role: "store",
+        store_id: order.store_id,
+        order_id: order.order_id,
+        key: "notice_cancel",
+        vars: { id: order.order_id, name: order.customer_name || "" },
+      });
+    }
+    saveDb(db);
+    return { ok: true, order };
+  },
+
+  async getNotifications() {
+    await delay();
+    const session = auth.getSession();
+    const db = getDb();
+    const notes = db.Notifications || [];
+    if (!session) return [];
+    if (session.role === "admin") return notes.filter((n) => n.role === "admin");
+    if (session.role === "store") {
+      const sid = auth.getBoundStoreId();
+      return notes.filter((n) => n.role === "store" && n.store_id === sid);
+    }
+    return notes.filter((n) => n.role === "customer" && n.user_id === session.user_id);
+  },
+
+  async markNotificationRead(id) {
+    await delay();
+    const db = getDb();
+    const n = (db.Notifications || []).find((x) => x.notification_id === id);
+    if (n) n.read = true;
+    saveDb(db);
+    return { ok: true };
+  },
+
+  async requestPasswordReset(username) {
+    await delay();
+    const db = getDb();
+    const acc = db.Accounts.find((a) => a.username === String(username || "").trim());
+    if (!acc) return { ok: false, code: "forgot_unknown" };
+    const user = db.Users.find((u) => u.user_id === acc.user_id);
+    if (!user || user.role !== "store") return { ok: false, code: "forgot_unknown" };
+    if (!Array.isArray(db.PasswordResets)) db.PasswordResets = [];
+    db.PasswordResets.unshift({
+      reset_id: newId("PW"),
+      username: acc.username,
+      user_id: user.user_id,
+      store_id: user.store_id,
+      done: false,
+      created_at: new Date().toISOString(),
+    });
+    addNote(db, {
+      role: "admin",
+      key: "notice_reset",
+      vars: { user: acc.username, id: user.store_id },
+    });
+    saveDb(db);
+    return { ok: true };
+  },
+
+  async resetStorePassword(storeId, newPassword) {
+    await delay();
+    if (!requireAdmin()) return { ok: false, code: "not_admin" };
+    const pwd = String(newPassword || "");
+    if (pwd.length < 4) return { ok: false, code: "bad_login" };
+    const db = getDb();
+    const user = db.Users.find((u) => u.role === "store" && u.store_id === storeId);
+    if (!user) return { ok: false, code: "no_store" };
+    const acc = db.Accounts.find((a) => a.user_id === user.user_id);
+    if (!acc) return { ok: false, code: "no_store" };
+    acc.password = pwd;
+    (db.PasswordResets || []).forEach((r) => {
+      if (r.store_id === storeId) r.done = true;
+    });
+    addNote(db, {
+      role: "store",
+      store_id: storeId,
+      key: "pw_reset_ok",
+      vars: {},
+    });
+    saveDb(db);
+    return { ok: true, username: acc.username };
+  },
+
+  async getPasswordResets() {
+    await delay();
+    if (!requireAdmin()) return [];
+    return (getDb().PasswordResets || []).filter((r) => !r.done);
+  },
+
+  async getAdminOrders() {
+    await delay();
+    if (!requireAdmin()) return [];
+    const db = getDb();
+    return db.Orders.slice()
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .map((o) => ({
+        ...o,
+        items: db.OrderItems.filter((i) => i.order_id === o.order_id),
+      }));
   },
 
   async createStore(payload) {
@@ -185,7 +337,7 @@ export const api = {
     db.Stores.push(store);
     db.Users.push({
       user_id,
-      name: String(payload.staff_name || store.store_name).trim(),
+      name: store.store_name,
       role: "store",
       store_id,
       status: "active",
@@ -210,6 +362,23 @@ export const api = {
     if (patch.status === "open" || patch.status === "closed") store.status = patch.status;
     saveDb(db);
     return { ok: true, store };
+  },
+
+  async deleteStore(storeId) {
+    await delay();
+    if (!requireAdmin()) return { ok: false, code: "not_admin" };
+    const db = getDb();
+    if (!db.Stores.some((s) => s.store_id === storeId)) return { ok: false, code: "no_store" };
+    const userIds = new Set(db.Users.filter((u) => u.store_id === storeId).map((u) => u.user_id));
+    db.Stores = db.Stores.filter((s) => s.store_id !== storeId);
+    db.Products = db.Products.filter((p) => p.store_id !== storeId);
+    db.Users = db.Users.filter((u) => u.store_id !== storeId);
+    db.Accounts = db.Accounts.filter((a) => !userIds.has(a.user_id));
+    if (Array.isArray(db.PasswordResets)) {
+      db.PasswordResets = db.PasswordResets.filter((r) => r.store_id !== storeId);
+    }
+    saveDb(db);
+    return { ok: true };
   },
 
   async createProduct(payload) {
@@ -258,6 +427,73 @@ export const api = {
     if (patch.status === "active" || patch.status === "soldout") product.status = patch.status;
     saveDb(db);
     return { ok: true, product };
+  },
+
+  async deleteProduct(productId) {
+    await delay();
+    const session = auth.getSession();
+    const db = getDb();
+    const product = db.Products.find((p) => p.product_id === productId);
+    if (!product) return { ok: false, code: "no_product" };
+    if (session.role === "store") {
+      if (product.store_id !== auth.getBoundStoreId()) return { ok: false, code: "not_admin" };
+    } else if (session.role !== "admin") {
+      return { ok: false, code: "not_admin" };
+    }
+    db.Products = db.Products.filter((p) => p.product_id !== productId);
+    saveDb(db);
+    return { ok: true };
+  },
+
+  async getAdminUsers() {
+    await delay();
+    if (!requireAdmin()) return [];
+    return getDb().Users.slice();
+  },
+
+  async getAdminReviews() {
+    await delay();
+    if (!requireAdmin()) return [];
+    return getDb().Reviews.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  },
+
+  async getAdminStats() {
+    await delay();
+    if (!requireAdmin()) return null;
+    const db = getDb();
+    const today = new Date().toDateString();
+    const todayOrders = db.Orders.filter((o) => new Date(o.created_at).toDateString() === today);
+    const revenue = db.Orders.filter((o) => o.status !== "rejected" && o.status !== "cancelled").reduce(
+      (s, o) => s + Number(o.total || 0),
+      0
+    );
+    const storeHits = {};
+    db.Orders.forEach((o) => {
+      storeHits[o.store_id] = (storeHits[o.store_id] || 0) + 1;
+    });
+    const productHits = {};
+    db.OrderItems.forEach((i) => {
+      productHits[i.product_name] = (productHits[i.product_name] || 0) + i.quantity;
+    });
+    const hourHits = {};
+    db.Orders.forEach((o) => {
+      const h = new Date(o.created_at).getHours();
+      hourHits[h] = (hourHits[h] || 0) + 1;
+    });
+    const topStore = Object.entries(storeHits).sort((a, b) => b[1] - a[1])[0];
+    const topProduct = Object.entries(productHits).sort((a, b) => b[1] - a[1])[0];
+    const peakHour = Object.entries(hourHits).sort((a, b) => b[1] - a[1])[0];
+    return {
+      stores: db.Stores.length,
+      products: db.Products.length,
+      orders: db.Orders.length,
+      today: todayOrders.length,
+      revenue,
+      topStoreId: topStore ? topStore[0] : "",
+      topStoreN: topStore ? topStore[1] : 0,
+      topProduct: topProduct ? topProduct[0] : "",
+      peakHour: peakHour ? Number(peakHour[0]) : null,
+    };
   },
 };
 

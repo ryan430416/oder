@@ -5,7 +5,7 @@ import { t } from "./i18n.js";
 import { toTime24 } from "./format.js";
 
 const MINUTES = ["00", "15", "30", "45"];
-const ICONS = ["🏪", "🍗", "🍜", "🧋", "☕", "🍱", "🥗", "🍰", "🥟", "🥤"];
+const ICONS = ["🍽️", "🏪", "🍗", "🍜", "🧋", "☕", "🍱", "🥗", "🍰", "🥟", "🥤"];
 
 export function hourLabel(h) {
   if (h === 0) return t("hour_0");
