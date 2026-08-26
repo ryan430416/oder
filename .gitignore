@@ -2,3 +2,4 @@
 Thumbs.db
 *.log
 .vscode/
+data/mock-db.json

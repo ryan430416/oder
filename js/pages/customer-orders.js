@@ -4,19 +4,12 @@ import { money, formatTime, dateKey, formatDate } from "../format.js";
 import { qs } from "../nav.js";
 import { initI18n, t, statusLabel, productLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
+import { ORDER_FILTERS, watchOrders } from "../order-filters.js";
 
 initI18n();
 const session = auth.ensureCustomer();
 mountBell(qs("#bellHost"), "notifications.html");
 
-const FILTERS = [
-  { id: "all", key: "filter_all" },
-  { id: "pending", key: "filter_pending" },
-  { id: "preparing", key: "filter_preparing" },
-  { id: "ready", key: "filter_ready" },
-  { id: "completed", key: "filter_completed" },
-  { id: "cancelled", key: "status_cancelled" },
-];
 let filter = "all";
 const tabs = qs("#tabs");
 const list = qs("#list");
@@ -24,9 +17,8 @@ const day = qs("#day");
 
 function match(o) {
   if (day.value && dateKey(o.created_at) !== day.value) return false;
-  if (filter === "all") return true;
-  if (filter === "preparing") return o.status === "accepted" || o.status === "preparing";
-  return o.status === filter;
+  const f = ORDER_FILTERS.find((x) => x.id === filter) || ORDER_FILTERS[0];
+  return f.match(o.status);
 }
 
 function canCancel(o) {
@@ -34,7 +26,7 @@ function canCancel(o) {
 }
 
 function drawTabs() {
-  tabs.innerHTML = FILTERS.map(
+  tabs.innerHTML = ORDER_FILTERS.map(
     (f) => `<button type="button" data-f="${f.id}" class="${f.id === filter ? "on" : ""}">${t(f.key)}</button>`
   ).join("");
 }
@@ -90,3 +82,5 @@ list.addEventListener("click", async (e) => {
 
 drawTabs();
 render();
+watchOrders(render);
+setInterval(render, 5000);

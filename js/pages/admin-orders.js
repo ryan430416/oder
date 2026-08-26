@@ -60,3 +60,4 @@ list.addEventListener("click", async (e) => {
 });
 
 render();
+setInterval(render, 5000);

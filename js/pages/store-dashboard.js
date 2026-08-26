@@ -4,6 +4,7 @@ import { money, formatTime, dateKey, formatDate } from "../format.js";
 import { qs } from "../nav.js";
 import { initI18n, t, statusLabel, productLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
+import { ORDER_FILTERS, watchOrders } from "../order-filters.js";
 
 initI18n();
 const session = auth.requireRole("store", "index.html");
@@ -16,13 +17,7 @@ qs("#logout").addEventListener("click", () => {
 });
 mountBell(qs("#bellHost"), "notifications.html");
 
-const GROUPS = [
-  { id: "new", key: "group_new", match: (s) => s === "pending" },
-  { id: "cook", key: "group_cook", match: (s) => s === "accepted" || s === "preparing" },
-  { id: "wait", key: "group_wait", match: (s) => s === "ready" },
-  { id: "done", key: "group_done", match: (s) => ["completed", "rejected", "cancelled"].includes(s) },
-];
-let group = "new";
+let group = "all";
 
 function actions(status) {
   let html = "";
@@ -50,14 +45,14 @@ const list = qs("#list");
 const day = qs("#day");
 
 function drawTabs() {
-  tabs.innerHTML = GROUPS.map(
+  tabs.innerHTML = ORDER_FILTERS.map(
     (g) => `<button type="button" data-g="${g.id}" class="${g.id === group ? "on" : ""}">${t(g.key)}</button>`
   ).join("");
 }
 
 async function render() {
   const orders = await api.getStoreOrders();
-  const g = GROUPS.find((x) => x.id === group);
+  const g = ORDER_FILTERS.find((x) => x.id === group) || ORDER_FILTERS[0];
   let rows = orders.filter((o) => g.match(o.status));
   if (day.value) rows = rows.filter((o) => dateKey(o.created_at) === day.value);
   if (!rows.length) {
@@ -117,4 +112,5 @@ list.addEventListener("click", async (e) => {
 
 drawTabs();
 render();
-setInterval(render, 20000);
+watchOrders(render);
+setInterval(render, 5000);
