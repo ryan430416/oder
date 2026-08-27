@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { auth } from "./auth.js";
 import { getDb, saveDb } from "./mock/db.js";
 import { isPickupTimeAllowed, toTime24 } from "./format.js";
+import { supabaseApi } from "./supabase-api.js";
 
 function delay(ms = 80) {
   return new Promise((r) => setTimeout(r, ms));
@@ -39,7 +40,7 @@ function nextStoreId(db) {
   return "S" + String(next).padStart(3, "0");
 }
 
-export const api = {
+const mockApi = {
   async getStores() {
     await delay();
     if (!config.USE_MOCK) {
@@ -536,3 +537,5 @@ export const api = {
     };
   },
 };
+
+export const api = config.USE_MOCK ? mockApi : supabaseApi;

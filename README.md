@@ -22,6 +22,31 @@ python -m http.server 8080
 
 目前 `js/config.js` 的 `USE_MOCK` 為 `true`，店家、餐點與訂單資料會存在瀏覽器 `localStorage`。這適合單機展示，但不同手機或瀏覽器不會共用資料，也不具備正式環境需要的後端驗證。
 
+## 啟用 Supabase 共用後端
+
+1. 在 Supabase Dashboard 開啟 **SQL Editor**，執行
+   [`supabase/migrations/001_initial_backend.sql`](supabase/migrations/001_initial_backend.sql)。
+2. 從 Supabase 專案的 **Connect** 視窗複製 Project URL 與
+   publishable key（舊專案顯示為 anon key）。
+3. 填入 [`js/config.js`](js/config.js)：
+
+```js
+USE_MOCK: false,
+SUPABASE_URL: "https://你的專案.supabase.co",
+SUPABASE_ANON_KEY: "你的 publishable key",
+```
+
+4. 將變更推到 GitHub，等待 Vercel 重新部署。
+
+完成後，所有學生、店家與管理員只要使用同一個 Vercel 網址，就會讀寫同一份
+Supabase 資料。訂單頁使用 Supabase Realtime，並保留每 5 秒重新讀取作為斷線備援。
+
+SQL migration 會建立 `admin / 1234` 與 `student / 1234`。店家帳號由管理員新增店家時建立。
+學生訪客會在各自瀏覽器產生不同的識別碼，因此不會看到其他學生的訂單。
+
+> 此 migration 是學生測試版：保留自訂帳密，且為了匿名 Realtime 開放訂單資料讀取。
+> 不可直接當正式系統；正式上線前應改用 Supabase Auth 與使用者範圍 RLS。
+
 示範帳號：
 
 | 帳號 | 密碼 | 角色 |
@@ -43,9 +68,8 @@ python -m http.server 8080
 
 ## 正式上線前仍需完成
 
-1. 部署 Google Apps Script、Supabase 或其他共用後端。
-2. 將帳號密碼驗證與角色權限移到後端，密碼需雜湊儲存。
-3. 在 `js/api.js` 接上完整 API，再將 `USE_MOCK` 改為 `false`。
-4. 移除公開的示範帳號提示並更換正式管理員密碼。
+1. 將測試帳密遷移到 Supabase Auth。
+2. 改用登入使用者範圍的 RLS，關閉匿名訂單讀取。
+3. 移除公開的示範帳號提示並更換正式管理員密碼。
 
-只把 `USE_MOCK` 改成 `false` 並不會自動產生後端；必須先設定有效的 `API_BASE_URL`。
+只把 `USE_MOCK` 改成 `false` 不夠；必須先執行 migration 並設定有效的 Supabase URL/key。

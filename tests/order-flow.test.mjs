@@ -45,7 +45,7 @@ test("order creation recalculates totals and rejects forged items", async () => 
     return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
   };
 
-  assert.equal(auth.login("admin", "1234").ok, true);
+  assert.equal((await auth.login("admin", "1234")).ok, true);
   const storeResult = await api.createStore({
     store_name: "Test store",
     username: "test_store",
@@ -87,7 +87,7 @@ test("order creation recalculates totals and rejects forged items", async () => 
   });
   assert.deepEqual(forged, { ok: false, code: "invalid_items" });
 
-  assert.equal(auth.login("test_store", "1234").ok, true);
+  assert.equal((await auth.login("test_store", "1234")).ok, true);
   const invalidTransition = await api.updateOrderStatus(orderResult.order.order_id, "completed");
   assert.equal(invalidTransition.ok, false);
   assert.equal(invalidTransition.code, "invalid_status");

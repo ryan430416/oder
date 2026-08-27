@@ -8,6 +8,10 @@ import { escapeHtml } from "../html.js";
 if (!bootAdmin()) throw new Error("admin");
 
 const stats = await api.getAdminStats();
+if (!stats) {
+  location.href = "index.html";
+  throw new Error("admin session expired");
+}
 const stores = await api.getStores();
 const sname = (id) => {
   const s = stores.find((x) => x.store_id === id);
