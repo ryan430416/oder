@@ -492,6 +492,21 @@ const mockApi = {
     return getDb().Users.slice();
   },
 
+  async deleteUserAccount(userId) {
+    await delay();
+    if (!requireAdmin()) return { ok: false, code: "not_admin" };
+    const db = getDb();
+    const user = db.Users.find((item) => item.user_id === userId);
+    if (!user) return { ok: false, code: "no_user" };
+    if (user.role === "admin") return { ok: false, code: "cannot_delete_admin" };
+    db.Accounts = db.Accounts.filter((account) => account.user_id !== userId);
+    db.Users = db.Users.filter((item) => item.user_id !== userId);
+    db.Notifications = (db.Notifications || []).filter((note) => note.user_id !== userId);
+    db.PasswordResets = (db.PasswordResets || []).filter((reset) => reset.user_id !== userId);
+    saveDb(db);
+    return { ok: true, user_id: userId, role: user.role, store_id: user.store_id || "" };
+  },
+
   async getAdminReviews() {
     await delay();
     if (!requireAdmin()) return [];

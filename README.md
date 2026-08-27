@@ -24,8 +24,8 @@ python -m http.server 8080
 
 ## 啟用 Supabase 共用後端
 
-1. 在 Supabase Dashboard 開啟 **SQL Editor**，執行
-   [`supabase/migrations/001_initial_backend.sql`](supabase/migrations/001_initial_backend.sql)。
+1. 在 Supabase Dashboard 開啟 **SQL Editor**，依檔名順序執行
+   [`supabase/migrations`](supabase/migrations) 內所有 SQL。
 2. 從 Supabase 專案的 **Connect** 視窗複製 Project URL 與
    publishable key（舊專案顯示為 anon key）。
 3. 填入 [`js/config.js`](js/config.js)：

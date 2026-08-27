@@ -272,6 +272,13 @@ export const supabaseApi = {
     return Array.isArray(data) ? data : [];
   },
 
+  deleteUserAccount(userId) {
+    return rpc("delete_user_account", {
+      p_token: token(),
+      p_user_id: userId,
+    });
+  },
+
   async getAdminReviews() {
     const data = await rpc("get_admin_reviews", { p_token: token() });
     return Array.isArray(data) ? data : [];
