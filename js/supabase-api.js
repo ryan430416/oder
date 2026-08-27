@@ -1,6 +1,7 @@
 import { config } from "./config.js";
 import { storage } from "./storage.js";
 import { getSupabase, rpc } from "./supabase.js";
+import { normalizeServicePeriods, servicePeriodBounds } from "./service-periods.js";
 
 function session() {
   return storage.get(config.SESSION_KEY, null);
@@ -23,6 +24,7 @@ function normalizeStore(store) {
     ...store,
     open_time: String(store.open_time || "").slice(0, 5),
     close_time: String(store.close_time || "").slice(0, 5),
+    service_periods: normalizeServicePeriods(store.service_periods),
   };
 }
 
@@ -201,23 +203,33 @@ export const supabaseApi = {
     return session()?.role === "admin" ? orderQuery() : Promise.resolve([]);
   },
 
-  createStore(payload) {
-    return rpc("create_store", {
+  async createStore(payload) {
+    const periods = normalizeServicePeriods(payload.service_periods);
+    if (!periods.length) return { ok: false, code: "need_service_period" };
+    const bounds = servicePeriodBounds(periods);
+    const created = await rpc("create_store", {
       p_token: token(),
       p_store_name: payload.store_name,
       p_description: payload.description || "",
-      p_open_time: payload.open_time || "10:00",
-      p_close_time: payload.close_time || "20:00",
+      p_open_time: bounds.open_time,
+      p_close_time: bounds.close_time,
       p_image: payload.image || "🏪",
       p_username: payload.username,
       p_password: payload.password,
     });
+    if (!created?.ok) return created;
+    const saved = await rpc("set_store_service_periods", {
+      p_token: token(),
+      p_store_id: created.store.store_id,
+      p_periods: periods,
+    });
+    return saved?.ok ? { ...created, store: saved.store } : saved;
   },
 
   async updateStore(storeId, patch) {
     const current = await this.getStore(storeId);
     if (!current) return { ok: false, code: "no_store" };
-    return rpc("update_store", {
+    const updated = await rpc("update_store", {
       p_token: token(),
       p_store_id: storeId,
       p_store_name: patch.store_name ?? current.store_name,
@@ -226,6 +238,14 @@ export const supabaseApi = {
       p_close_time: patch.close_time ?? current.close_time,
       p_status: patch.status ?? current.status,
       p_image: patch.image ?? current.image,
+    });
+    if (!updated?.ok || patch.service_periods == null) return updated;
+    const periods = normalizeServicePeriods(patch.service_periods);
+    if (!periods.length) return { ok: false, code: "need_service_period" };
+    return rpc("set_store_service_periods", {
+      p_token: token(),
+      p_store_id: storeId,
+      p_periods: periods,
     });
   },
 

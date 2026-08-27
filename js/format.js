@@ -1,4 +1,5 @@
 /** 金額、時間、訂單狀態顯示 */
+import { SERVICE_PERIODS, normalizeServicePeriods } from "./service-periods.js";
 
 export const STATUS_LABEL = {
   pending: "待店家接單",
@@ -46,7 +47,7 @@ export function parseTimeMinutes(raw) {
   return hour * 60 + minute;
 }
 
-function serviceWindow(store, now) {
+function legacyServiceWindow(store, now) {
   const openMinutes = parseTimeMinutes(store?.open_time);
   const closeMinutes = parseTimeMinutes(store?.close_time);
   if (openMinutes == null || closeMinutes == null || openMinutes === closeMinutes) return null;
@@ -67,6 +68,24 @@ function serviceWindow(store, now) {
   return { open, close };
 }
 
+function serviceWindows(store, date) {
+  const periods = normalizeServicePeriods(store?.service_periods);
+  if (!periods.length) {
+    const legacy = legacyServiceWindow(store, date);
+    return legacy ? [legacy] : [];
+  }
+  return periods.map((id) => {
+    const period = SERVICE_PERIODS[id];
+    const [openHour, openMinute] = period.open.split(":").map(Number);
+    const [closeHour, closeMinute] = period.close.split(":").map(Number);
+    const open = new Date(date);
+    const close = new Date(date);
+    open.setHours(openHour, openMinute, 0, 0);
+    close.setHours(closeHour, closeMinute, 0, 0);
+    return { open, close };
+  });
+}
+
 export function isPickupTimeAllowed(store, pickupTime, now = new Date()) {
   if (!store || store.status !== "open") return false;
   const pickup = new Date(pickupTime);
@@ -75,25 +94,32 @@ export function isPickupTimeAllowed(store, pickupTime, now = new Date()) {
   if (pickup < earliest || pickup > new Date(now.getTime() + 24 * 60 * 60 * 1000)) return false;
   if (pickup.getMinutes() % 15 !== 0 || pickup.getSeconds() !== 0) return false;
 
-  const window = serviceWindow(store, pickup);
-  return Boolean(window && pickup >= window.open && pickup < window.close);
+  return serviceWindows(store, pickup).some((window) => pickup >= window.open && pickup < window.close);
 }
 
 export function pickupSlotsForStore(store, now = new Date()) {
   if (!store || store.status !== "open") return [];
-  const window = serviceWindow(store, now);
-  if (!window) return [];
   const slots = [];
-  const earliest = new Date(Math.max(now.getTime() + 15 * 60 * 1000, window.open.getTime()));
-  earliest.setSeconds(0, 0);
-  earliest.setMinutes(Math.ceil(earliest.getMinutes() / 15) * 15);
-
-  for (let t = earliest; t < window.close && slots.length < 16; t = new Date(t.getTime() + 15 * 60 * 1000)) {
-    const p = (x) => String(x).padStart(2, "0");
-    slots.push({
-      value: t.toISOString(),
-      label: `${p(t.getHours())}:${p(t.getMinutes())}`,
-    });
+  const lastAllowed = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  for (let dayOffset = 0; dayOffset <= 1 && slots.length < 16; dayOffset += 1) {
+    const date = new Date(now);
+    date.setDate(date.getDate() + dayOffset);
+    for (const window of serviceWindows(store, date)) {
+      const earliest = new Date(Math.max(now.getTime() + 15 * 60 * 1000, window.open.getTime()));
+      earliest.setSeconds(0, 0);
+      earliest.setMinutes(Math.ceil(earliest.getMinutes() / 15) * 15);
+      for (
+        let time = earliest;
+        time < window.close && time <= lastAllowed && slots.length < 16;
+        time = new Date(time.getTime() + 15 * 60 * 1000)
+      ) {
+        const p = (x) => String(x).padStart(2, "0");
+        slots.push({
+          value: time.toISOString(),
+          label: `${p(time.getHours())}:${p(time.getMinutes())}`,
+        });
+      }
+    }
   }
   return slots;
 }

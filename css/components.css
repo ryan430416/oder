@@ -172,6 +172,18 @@
   flex: 1;
 }
 
+.check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.check-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .qty button {
   width: 32px;
   height: 32px;

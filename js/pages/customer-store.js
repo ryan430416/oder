@@ -5,6 +5,7 @@ import { money } from "../format.js";
 import { qs } from "../nav.js";
 import { initI18n, t, storeLabel, productLabel, productDesc, categoryLabel } from "../i18n.js";
 import { escapeAttr, escapeHtml, productImageHtml } from "../html.js";
+import { servicePeriodsLabel } from "../service-periods.js";
 
 initI18n();
 auth.ensureCustomer();
@@ -19,7 +20,7 @@ if (!store) {
 
 const lab = storeLabel(store);
 qs("#storeName").textContent = lab.name;
-qs("#storeDesc").textContent = `${lab.desc} · ${store.open_time}–${store.close_time}`;
+qs("#storeDesc").textContent = `${lab.desc} · ${servicePeriodsLabel(store.service_periods)}`;
 const storeClosed = store.status !== "open";
 
 function refreshBadge() {

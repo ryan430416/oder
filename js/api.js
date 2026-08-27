@@ -8,6 +8,7 @@ import { auth } from "./auth.js";
 import { getDb, saveDb } from "./mock/db.js";
 import { isPickupTimeAllowed, toTime24 } from "./format.js";
 import { supabaseApi } from "./supabase-api.js";
+import { normalizeServicePeriods, servicePeriodBounds } from "./service-periods.js";
 
 function delay(ms = 80) {
   return new Promise((r) => setTimeout(r, ms));
@@ -371,12 +372,16 @@ const mockApi = {
     }
     const store_id = nextStoreId(db);
     const now = new Date().toISOString();
+    const service_periods = normalizeServicePeriods(payload.service_periods);
+    if (!service_periods.length) return { ok: false, code: "need_service_period" };
+    const bounds = servicePeriodBounds(service_periods);
     const store = {
       store_id,
       store_name: String(payload.store_name || "").trim(),
       description: String(payload.description || "").trim(),
-      open_time: toTime24(payload.open_time, "10:00"),
-      close_time: toTime24(payload.close_time, "20:00"),
+      open_time: bounds.open_time,
+      close_time: bounds.close_time,
+      service_periods,
       status: payload.status === "closed" ? "closed" : "open",
       image: String(payload.image || "🏪").trim() || "🏪",
     };
@@ -408,6 +413,14 @@ const mockApi = {
       store.store_name = name;
     }
     if (patch.description != null) store.description = String(patch.description).trim();
+    if (patch.service_periods != null) {
+      const periods = normalizeServicePeriods(patch.service_periods);
+      if (!periods.length) return { ok: false, code: "need_service_period" };
+      const bounds = servicePeriodBounds(periods);
+      store.service_periods = periods;
+      store.open_time = bounds.open_time;
+      store.close_time = bounds.close_time;
+    }
     if (patch.open_time != null) store.open_time = toTime24(patch.open_time, store.open_time);
     if (patch.close_time != null) store.close_time = toTime24(patch.close_time, store.close_time);
     if (patch.image != null) store.image = String(patch.image).trim() || store.image;

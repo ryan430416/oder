@@ -27,8 +27,8 @@ python -m http.server 8080
 1. 在 Supabase Dashboard 開啟 **SQL Editor**，依檔名順序執行
    [`supabase/migrations`](supabase/migrations) 內所有 SQL。
    已完成前兩個 migration 的專案，只需接著執行
-   `003_grade_photos_simple_flow.sql`、`004_high_school_grades.sql` 與
-   `005_one_day_sessions.sql`。
+   `003_grade_photos_simple_flow.sql`、`004_high_school_grades.sql`、
+   `005_one_day_sessions.sql` 與 `006_store_service_periods.sql`。
 2. 從 Supabase 專案的 **Connect** 視窗複製 Project URL 與
    publishable key（舊專案顯示為 anon key）。
 3. 填入 [`js/config.js`](js/config.js)：
@@ -64,6 +64,7 @@ SQL migration 會建立 `admin / 1234` 與 `student / 1234`。店家帳號由管
 - 顧客：店家列表、菜單、購物車、結帳、訂單與通知
 - 顧客資料包含姓名與高中一至三年級，訂單保留當時的年級
 - 店家：自己的訂單、待接單 → 可取餐 → 完成流程與菜單管理
+- 店家可複選早餐 08:30–10:30、午餐 11:00–13:00 營業時段
 - 店家與管理員可上傳餐點照片（最大 5MB）
 - 管理員：店家、餐點、訂單、使用者、評價與統計頁面
 - 中文、泰文、緬文、英文介面

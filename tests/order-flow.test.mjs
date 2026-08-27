@@ -23,6 +23,10 @@ test("pickup slots respect store hours and closed status", () => {
   assert.equal(pickupSlotsForStore(overnightStore, localDate(23, 0))[0].label, "23:15");
   assert.equal(isPickupTimeAllowed(dayStore, localDate(10, 30).toISOString(), localDate(9, 0)), true);
   assert.equal(isPickupTimeAllowed(dayStore, localDate(21, 0).toISOString(), localDate(9, 0)), false);
+  const schoolStore = { status: "open", service_periods: ["breakfast", "lunch"] };
+  assert.equal(isPickupTimeAllowed(schoolStore, localDate(9, 0).toISOString(), localDate(8, 0)), true);
+  assert.equal(isPickupTimeAllowed(schoolStore, localDate(10, 45).toISOString(), localDate(8, 0)), false);
+  assert.equal(isPickupTimeAllowed(schoolStore, localDate(12, 0).toISOString(), localDate(8, 0)), true);
 });
 
 test("order creation recalculates totals and rejects forged items", async () => {
@@ -52,6 +56,7 @@ test("order creation recalculates totals and rejects forged items", async () => 
     password: "1234",
     open_time: timeAtOffset(-60),
     close_time: timeAtOffset(180),
+    service_periods: ["breakfast", "lunch"],
     status: "open",
   });
   assert.equal(storeResult.ok, true);

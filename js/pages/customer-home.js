@@ -5,6 +5,7 @@ import { qs } from "../nav.js";
 import { initI18n, t, storeLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
 import { escapeHtml } from "../html.js";
+import { servicePeriodsLabel } from "../service-periods.js";
 
 initI18n();
 const session = auth.ensureCustomer();
@@ -59,7 +60,7 @@ function render(filter = "") {
       <div>
         <strong>${escapeHtml(lab.name)}</strong>
         <div class="muted">${escapeHtml(lab.desc)}</div>
-        <div class="muted">${escapeHtml(s.open_time)}–${escapeHtml(s.close_time)}</div>
+        <div class="muted">${escapeHtml(servicePeriodsLabel(s.service_periods))}</div>
       </div>
       <span class="badge ${open ? "" : "off"}">${escapeHtml(open ? t("open") : t("closed"))}</span>
     </${tag}>`;
