@@ -2,7 +2,7 @@ import { auth } from "../auth.js";
 import { api } from "../api.js";
 import { money, formatTime, dateKey, formatDate } from "../format.js";
 import { qs } from "../nav.js";
-import { initI18n, t, statusLabel, productLabel } from "../i18n.js";
+import { initI18n, t, statusLabel, productLabel, gradeLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
 import { ORDER_FILTERS, watchOrders } from "../order-filters.js";
 import { escapeAttr, escapeHtml } from "../html.js";
@@ -23,14 +23,8 @@ let group = "all";
 function actions(status) {
   let html = "";
   if (status === "pending") {
-    html += `<button class="btn" data-next="accepted">${t("accept")}</button>
+    html += `<button class="btn" data-next="ready">${t("mark_ready")}</button>
             <button class="btn btn-danger" data-next="rejected">${t("reject")}</button>`;
-  }
-  if (status === "accepted") {
-    html += `<button class="btn" data-next="preparing">${t("start_cook")}</button>`;
-  }
-  if (status === "preparing") {
-    html += `<button class="btn" data-next="ready">${t("mark_ready")}</button>`;
   }
   if (status === "ready") {
     html += `<button class="btn" data-next="completed">${t("complete")}</button>`;
@@ -75,6 +69,7 @@ async function render() {
         <span class="status ${escapeAttr(o.status)}">${escapeHtml(statusLabel(o.status))}</span>
       </div>
       <div class="muted">${escapeHtml(t("cust_label", { name: o.customer_name || "—" }))}</div>
+      <div class="muted">${escapeHtml(t("grade_label", { grade: gradeLabel(o.customer_grade) }))}</div>
       <div class="muted">${escapeHtml(t("pickup_at", { time: formatTime(o.pickup_time), amount: money(o.total) }))}</div>
       <ul class="item-list">${o.items.map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}</li>`).join("")}</ul>
       <div class="row-actions">${actions(o.status)}</div>

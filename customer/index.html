@@ -26,7 +26,16 @@
       <label for="custName" data-i18n="cust_name"></label>
       <div class="name-row">
         <input id="custName" autocomplete="name" />
-        <button class="btn" type="button" id="saveName" data-i18n="save_name"></button>
+      </div>
+      <label for="custGrade" data-i18n="grade"></label>
+      <div class="name-row">
+        <select id="custGrade">
+          <option value="" data-i18n="grade_choose"></option>
+          <option value="high_1" data-i18n="grade_high_1"></option>
+          <option value="high_2" data-i18n="grade_high_2"></option>
+          <option value="high_3" data-i18n="grade_high_3"></option>
+        </select>
+        <button class="btn" type="button" id="saveName" data-i18n="save_profile"></button>
       </div>
       <p class="muted" id="nameMsg"></p>
     </div>

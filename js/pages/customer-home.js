@@ -10,14 +10,20 @@ initI18n();
 const session = auth.ensureCustomer();
 qs("#who").textContent = t("who", { name: session.name });
 qs("#custName").value = session.name === "學生小明" ? "" : session.name;
+qs("#custGrade").value = session.grade || "";
 qs("#cartCount").textContent = cart.count();
 qs("#cartCount").hidden = cart.count() === 0;
 mountBell(qs("#bellHost"), "notifications.html");
 
-qs("#saveName").addEventListener("click", () => {
-  const res = auth.setCustomerName(qs("#custName").value);
-  qs("#nameMsg").textContent = res.ok ? t("name_saved") : t(res.code);
-  if (res.ok) qs("#who").textContent = t("who", { name: res.session.name });
+qs("#saveName").addEventListener("click", async () => {
+  const res = auth.setCustomerProfile(qs("#custName").value, qs("#custGrade").value);
+  if (!res.ok) {
+    qs("#nameMsg").textContent = t(res.code);
+    return;
+  }
+  const saved = await api.updateCustomerProfile(res.session.name, res.session.grade);
+  qs("#nameMsg").textContent = saved.ok ? t("profile_saved") : t(saved.code || "backend_error");
+  if (saved.ok) qs("#who").textContent = t("who", { name: res.session.name });
 });
 
 const listEl = qs("#list");

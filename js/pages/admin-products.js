@@ -4,7 +4,8 @@ import { qs } from "../nav.js";
 import { t, storeLabel, productLabel, productDesc, categoryLabel } from "../i18n.js";
 import { bootAdmin } from "../admin-boot.js";
 import { mountIconPick } from "../easy-pick.js";
-import { escapeAttr, escapeHtml } from "../html.js";
+import { escapeAttr, escapeHtml, productImageHtml } from "../html.js";
+import { uploadProductImage } from "../product-image.js";
 
 if (!bootAdmin()) throw new Error("admin");
 
@@ -14,8 +15,14 @@ const list = qs("#list");
 const msg = qs("#msg");
 const submitBtn = qs("#submitBtn");
 const iconPick = qs("#iconPick");
+const photoInput = qs("#adminProductPhoto");
+const photoPreview = qs("#photoPreview");
 
 mountIconPick(iconPick, { name: "image", value: "🍽️" });
+photoInput.addEventListener("change", () => {
+  const file = photoInput.files[0];
+  photoPreview.innerHTML = file ? productImageHtml(URL.createObjectURL(file), file.name) : "";
+});
 
 function payload() {
   const data = Object.fromEntries(new FormData(form).entries());
@@ -48,7 +55,8 @@ async function render() {
     .map(
       (p) => `
     <article class="card">
-      <strong>${escapeHtml(p.image || "")} ${escapeHtml(productLabel(p.product_id, p.product_name))}</strong>
+      ${productImageHtml(p.image, p.product_name)}
+      <strong>${escapeHtml(productLabel(p.product_id, p.product_name))}</strong>
       <div class="muted">${escapeHtml(categoryLabel(p.category))} · ${escapeHtml(p.product_id)}</div>
       <div class="muted">${escapeHtml(productDesc(p.product_id, p.description))}</div>
       <div>${money(p.price)}</div>
@@ -70,6 +78,12 @@ form.addEventListener("submit", async (e) => {
     msg.textContent = t("no_store");
     return;
   }
+  const upload = await uploadProductImage(photoInput.files[0], data.store_id);
+  if (!upload.ok) {
+    msg.textContent = t(upload.code);
+    return;
+  }
+  if (upload.url) data.image = upload.url;
   const res = data.product_id
     ? await api.updateProduct(data.product_id, data)
     : await api.createProduct(data);
@@ -81,6 +95,7 @@ form.addEventListener("submit", async (e) => {
   form.reset();
   form.product_id.value = "";
   iconPick._set("🍽️");
+  photoPreview.replaceChildren();
   submitBtn.textContent = t("form_add_product");
   render();
 });
@@ -89,6 +104,7 @@ pick.addEventListener("change", () => {
   form.reset();
   form.product_id.value = "";
   iconPick._set("🍽️");
+  photoPreview.replaceChildren();
   submitBtn.textContent = t("form_add_product");
   msg.textContent = "";
   render();
@@ -123,6 +139,7 @@ list.addEventListener("click", async (e) => {
   form.description.value = p.description;
   form.price.value = p.price;
   iconPick._set(p.image);
+  photoPreview.innerHTML = productImageHtml(p.image, p.product_name);
   form.status.value = p.status;
   submitBtn.textContent = t("form_save_product");
 });

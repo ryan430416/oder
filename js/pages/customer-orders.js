@@ -2,7 +2,7 @@ import { auth } from "../auth.js";
 import { api } from "../api.js";
 import { money, formatTime, dateKey, formatDate } from "../format.js";
 import { qs } from "../nav.js";
-import { initI18n, t, statusLabel, productLabel } from "../i18n.js";
+import { initI18n, t, statusLabel, productLabel, gradeLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
 import { ORDER_FILTERS, watchOrders } from "../order-filters.js";
 import { escapeAttr, escapeHtml } from "../html.js";
@@ -23,7 +23,7 @@ function match(o) {
 }
 
 function canCancel(o) {
-  return o.status === "pending" || o.status === "accepted";
+  return o.status === "pending";
 }
 
 function drawTabs() {
@@ -54,6 +54,7 @@ async function render() {
         <span class="status ${escapeAttr(o.status)}">${escapeHtml(statusLabel(o.status))}</span>
       </div>
       <div class="muted">${escapeHtml(t("cust_label", { name: o.customer_name || session.name }))}</div>
+      <div class="muted">${escapeHtml(t("grade_label", { grade: gradeLabel(o.customer_grade || session.grade) }))}</div>
       <div class="muted">${escapeHtml(t("pickup_at", { time: formatTime(o.pickup_time), amount: money(o.total) }))}</div>
       <ul class="item-list">${o.items.map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}</li>`).join("")}</ul>
       ${canCancel(o) ? `<div class="row-actions"><button class="btn btn-danger" type="button" data-cancel="${escapeAttr(o.order_id)}">${escapeHtml(t("cancel_order"))}</button></div>` : ""}

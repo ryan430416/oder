@@ -7,22 +7,35 @@ import { storage } from "./storage.js";
 import { getDb, saveDb } from "./mock/db.js";
 import { rpc } from "./supabase.js";
 
+const CUSTOMER_GRADES = new Set(["high_1", "high_2", "high_3"]);
+
 function getGuest() {
   let guest = storage.get(config.GUEST_KEY, null);
+  if (guest?.expires_at && new Date(guest.expires_at).getTime() <= Date.now()) {
+    storage.remove(config.GUEST_KEY);
+    guest = null;
+  }
   if (!guest) {
     const id =
       typeof crypto !== "undefined" && crypto.randomUUID
         ? crypto.randomUUID()
         : Date.now().toString(36) + Math.random().toString(36).slice(2);
-    guest = { user_id: `guest_${id}`, name: "學生小明", role: "customer", store_id: "" };
-    storage.set(config.GUEST_KEY, guest);
+    guest = { user_id: `guest_${id}`, name: "學生小明", grade: "", role: "customer", store_id: "" };
   }
+  if (guest.grade == null) guest.grade = "";
+  storage.set(config.GUEST_KEY, guest);
   return guest;
 }
 
 export const auth = {
   getSession() {
-    return storage.get(config.SESSION_KEY, null);
+    const value = storage.get(config.SESSION_KEY, null);
+    if (value?.expires_at && new Date(value.expires_at).getTime() <= Date.now()) {
+      storage.remove(config.SESSION_KEY);
+      if (value.role === "customer") storage.remove(config.GUEST_KEY);
+      return null;
+    }
+    return value;
   },
 
   requireRole(role, loginHref) {
@@ -67,6 +80,7 @@ export const auth = {
     const session = {
       user_id: user.user_id,
       name: user.name,
+      grade: user.grade || "",
       role: user.role,
       store_id: user.store_id || "",
     };
@@ -95,6 +109,7 @@ export const auth = {
     const guest = {
       user_id: user.user_id,
       name: user.name,
+      grade: user.grade || "",
       role: "customer",
       store_id: "",
     };
@@ -104,26 +119,36 @@ export const auth = {
   },
 
   setCustomerName(name) {
+    return this.setCustomerProfile(name, this.ensureCustomer().grade || "");
+  },
+
+  setCustomerProfile(name, grade) {
     const n = String(name || "").trim();
+    const g = String(grade || "").trim();
     if (!n) return { ok: false, code: "need_name" };
+    if (!g) return { ok: false, code: "need_grade" };
+    if (!CUSTOMER_GRADES.has(g)) return { ok: false, code: "invalid_grade" };
     const live = this.getSession();
     if (live && (live.role === "admin" || live.role === "store")) {
-      const session = { ...getGuest(), name: n };
+      const session = { ...getGuest(), name: n, grade: g };
       storage.set(config.GUEST_KEY, session);
       return { ok: true, session };
     }
     const s = this.ensureCustomer();
     if (!config.USE_MOCK) {
-      const session = { ...s, name: n, role: "customer" };
+      const session = { ...s, name: n, grade: g, role: "customer" };
       storage.set(config.GUEST_KEY, session);
       storage.set(config.SESSION_KEY, session);
       return { ok: true, session };
     }
     const db = getDb();
     const user = db.Users.find((u) => u.user_id === s.user_id);
-    if (user) user.name = n;
+    if (user) {
+      user.name = n;
+      user.grade = g;
+    }
     saveDb(db);
-    const session = { ...s, name: n, role: "customer" };
+    const session = { ...s, name: n, grade: g, role: "customer" };
     storage.set(config.SESSION_KEY, session);
     return { ok: true, session };
   },

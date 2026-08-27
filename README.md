@@ -20,12 +20,15 @@ python -m http.server 8080
 
 ## 目前模式
 
-目前 `js/config.js` 的 `USE_MOCK` 為 `true`，店家、餐點與訂單資料會存在瀏覽器 `localStorage`。這適合單機展示，但不同手機或瀏覽器不會共用資料，也不具備正式環境需要的後端驗證。
+目前 `js/config.js` 已設定為 Supabase 共用後端模式。
 
 ## 啟用 Supabase 共用後端
 
 1. 在 Supabase Dashboard 開啟 **SQL Editor**，依檔名順序執行
    [`supabase/migrations`](supabase/migrations) 內所有 SQL。
+   已完成前兩個 migration 的專案，只需接著執行
+   `003_grade_photos_simple_flow.sql`、`004_high_school_grades.sql` 與
+   `005_one_day_sessions.sql`。
 2. 從 Supabase 專案的 **Connect** 視窗複製 Project URL 與
    publishable key（舊專案顯示為 anon key）。
 3. 填入 [`js/config.js`](js/config.js)：
@@ -59,7 +62,9 @@ SQL migration 會建立 `admin / 1234` 與 `student / 1234`。店家帳號由管
 ## 已完成
 
 - 顧客：店家列表、菜單、購物車、結帳、訂單與通知
-- 店家：自己的訂單、狀態流程與菜單管理
+- 顧客資料包含姓名與高中一至三年級，訂單保留當時的年級
+- 店家：自己的訂單、待接單 → 可取餐 → 完成流程與菜單管理
+- 店家與管理員可上傳餐點照片（最大 5MB）
 - 管理員：店家、餐點、訂單、使用者、評價與統計頁面
 - 中文、泰文、緬文、英文介面
 - 休息店家阻擋下單、依營業時間提供取餐時段

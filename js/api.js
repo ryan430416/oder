@@ -66,7 +66,26 @@ const mockApi = {
     return getDb().Products.filter((p) => p.store_id === storeId);
   },
 
-  async createOrder({ customer_id, customer_name, store_id, pickup_time, payment_method, items }) {
+  async updateCustomerProfile(name, grade) {
+    const n = String(name || "").trim();
+    const g = String(grade || "").trim();
+    if (!n) return { ok: false, code: "need_name" };
+    if (!g) return { ok: false, code: "need_grade" };
+    if (!["high_1", "high_2", "high_3"].includes(g)) {
+      return { ok: false, code: "invalid_grade" };
+    }
+    const db = getDb();
+    const current = auth.ensureCustomer();
+    const user = db.Users.find((item) => item.user_id === current.user_id);
+    if (user) {
+      user.name = n;
+      user.grade = g;
+      saveDb(db);
+    }
+    return { ok: true };
+  },
+
+  async createOrder({ customer_id, customer_name, customer_grade, store_id, pickup_time, payment_method, items }) {
     await delay();
     if (!config.USE_MOCK) {
       const res = await fetch(config.API_BASE_URL, {
@@ -84,7 +103,12 @@ const mockApi = {
       return res.json();
     }
     const name = String(customer_name || "").trim();
+    const grade = String(customer_grade || "").trim();
     if (!name) return { ok: false, code: "need_name" };
+    if (!grade) return { ok: false, code: "need_grade" };
+    if (!["high_1", "high_2", "high_3"].includes(grade)) {
+      return { ok: false, code: "invalid_grade" };
+    }
     const db = getDb();
     const store = db.Stores.find((s) => s.store_id === store_id);
     if (!store) return { ok: false, code: "no_store" };
@@ -123,6 +147,7 @@ const mockApi = {
       store_id,
       customer_id,
       customer_name: name,
+      customer_grade: grade,
       pickup_time,
       total,
       payment_method: ["cash", "campus"].includes(payment_method) ? payment_method : "cash",
@@ -182,9 +207,7 @@ const mockApi = {
       return { ok: false, message: "無權限操作此訂單" };
     }
     const transitions = {
-      pending: ["accepted", "rejected"],
-      accepted: ["preparing"],
-      preparing: ["ready"],
+      pending: ["ready", "rejected"],
       ready: ["completed"],
     };
     if (!transitions[order.status]?.includes(nextStatus)) {

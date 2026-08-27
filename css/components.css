@@ -52,6 +52,25 @@
   box-shadow: var(--shadow);
 }
 
+.product-photo {
+  display: block;
+  width: 100%;
+  max-width: 260px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.product-emoji {
+  font-size: 1.5rem;
+}
+
+.image-preview {
+  max-width: 220px;
+  margin-top: 10px;
+}
+
 .grid {
   display: grid;
   gap: 12px;
@@ -148,7 +167,8 @@
   align-items: end;
 }
 
-.name-row input {
+.name-row input,
+.name-row select {
   flex: 1;
 }
 

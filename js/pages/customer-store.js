@@ -4,7 +4,7 @@ import { cart } from "../cart.js";
 import { money } from "../format.js";
 import { qs } from "../nav.js";
 import { initI18n, t, storeLabel, productLabel, productDesc, categoryLabel } from "../i18n.js";
-import { escapeAttr, escapeHtml } from "../html.js";
+import { escapeAttr, escapeHtml, productImageHtml } from "../html.js";
 
 initI18n();
 auth.ensureCustomer();
@@ -54,7 +54,8 @@ function drawMenu() {
       return `
       <article class="card product">
         <div>
-          <h3>${escapeHtml(p.image)} ${escapeHtml(productLabel(p.product_id, p.product_name))}</h3>
+          ${productImageHtml(p.image, p.product_name)}
+          <h3>${escapeHtml(productLabel(p.product_id, p.product_name))}</h3>
           <div class="muted">${escapeHtml(productDesc(p.product_id, p.description))}</div>
           <div class="price">${money(p.price)}</div>
           ${sold ? `<span class="badge sold">${escapeHtml(storeClosed ? t("store_closed") : t("soldout"))}</span>` : ""}

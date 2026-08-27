@@ -10,6 +10,13 @@ function token() {
   return session()?.token || "";
 }
 
+function isLiveSession(value) {
+  return Boolean(
+    value?.token &&
+      (!value.expires_at || new Date(value.expires_at).getTime() > Date.now())
+  );
+}
+
 function normalizeStore(store) {
   if (!store) return store;
   return {
@@ -21,13 +28,18 @@ function normalizeStore(store) {
 
 async function ensureCustomerSession() {
   const current = session();
-  if (current?.role === "customer" && current.token) return current;
-  const guest = storage.get(config.GUEST_KEY, null);
-  if (guest?.token) return guest;
+  if (current?.role === "customer" && isLiveSession(current)) return current;
+  let guest = storage.get(config.GUEST_KEY, null);
+  if (isLiveSession(guest)) return guest;
+  if (guest?.token) {
+    guest = { ...guest, token: "", expires_at: "" };
+    storage.set(config.GUEST_KEY, guest);
+  }
   const result = await rpc("create_guest_session", {
     p_name: guest?.name || current?.name || "學生小明",
   });
   if (!result?.ok) return null;
+  result.session.grade = guest?.grade || current?.grade || "";
   storage.set(config.GUEST_KEY, result.session);
   if (!current || current.role === "customer") {
     storage.set(config.SESSION_KEY, result.session);
@@ -98,9 +110,21 @@ export const supabaseApi = {
     }
   },
 
-  async createOrder({ customer_name, store_id, pickup_time, payment_method, items }) {
+  async updateCustomerProfile(name, grade) {
     const customer = await ensureCustomerSession();
     if (!customer) return { ok: false, code: "backend_error" };
+    return rpc("update_customer_profile", {
+      p_token: customer.token,
+      p_name: name,
+      p_grade: grade,
+    });
+  },
+
+  async createOrder({ customer_name, customer_grade, store_id, pickup_time, payment_method, items }) {
+    const customer = await ensureCustomerSession();
+    if (!customer) return { ok: false, code: "backend_error" };
+    const profile = await this.updateCustomerProfile(customer_name, customer_grade);
+    if (!profile?.ok) return profile;
     return rpc("create_order", {
       p_token: customer.token,
       p_customer_name: customer_name,

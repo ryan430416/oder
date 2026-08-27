@@ -13,3 +13,11 @@ export function escapeHtml(value) {
 }
 
 export const escapeAttr = escapeHtml;
+
+export function productImageHtml(image, alt = "") {
+  const value = String(image || "").trim();
+  if (/^(https?:\/\/|data:image\/|blob:)/i.test(value)) {
+    return `<img class="product-photo" src="${escapeAttr(value)}" alt="${escapeAttr(alt)}" loading="lazy" />`;
+  }
+  return `<span class="product-emoji" aria-hidden="true">${escapeHtml(value || "🍽️")}</span>`;
+}

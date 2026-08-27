@@ -5,8 +5,6 @@ import { getSupabase, isSupabaseEnabled } from "./supabase.js";
 export const ORDER_FILTERS = [
   { id: "all", key: "filter_all", match: () => true },
   { id: "pending", key: "status_pending", match: (s) => s === "pending" },
-  { id: "accepted", key: "status_accepted", match: (s) => s === "accepted" },
-  { id: "preparing", key: "status_preparing", match: (s) => s === "preparing" },
   { id: "ready", key: "status_ready", match: (s) => s === "ready" },
   { id: "completed", key: "status_completed", match: (s) => s === "completed" },
   { id: "cancelled", key: "status_cancelled", match: (s) => s === "cancelled" || s === "rejected" },

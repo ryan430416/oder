@@ -69,6 +69,7 @@ test("order creation recalculates totals and rejects forged items", async () => 
   const orderResult = await api.createOrder({
     customer_id: "test_customer",
     customer_name: "Tester",
+    customer_grade: "high_2",
     store_id: storeResult.store.store_id,
     pickup_time: pickup.value,
     payment_method: "cash",
@@ -80,6 +81,7 @@ test("order creation recalculates totals and rejects forged items", async () => 
   const forged = await api.createOrder({
     customer_id: "test_customer",
     customer_name: "Tester",
+    customer_grade: "high_2",
     store_id: storeResult.store.store_id,
     pickup_time: pickup.value,
     payment_method: "cash",
@@ -91,5 +93,5 @@ test("order creation recalculates totals and rejects forged items", async () => 
   const invalidTransition = await api.updateOrderStatus(orderResult.order.order_id, "completed");
   assert.equal(invalidTransition.ok, false);
   assert.equal(invalidTransition.code, "invalid_status");
-  assert.equal((await api.updateOrderStatus(orderResult.order.order_id, "accepted")).ok, true);
+  assert.equal((await api.updateOrderStatus(orderResult.order.order_id, "ready")).ok, true);
 });

@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { money, formatTime, dateKey, formatDate } from "../format.js";
 import { qs } from "../nav.js";
-import { t, statusLabel, productLabel, storeLabel } from "../i18n.js";
+import { t, statusLabel, productLabel, storeLabel, gradeLabel } from "../i18n.js";
 import { bootAdmin } from "../admin-boot.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 
@@ -40,6 +40,7 @@ async function render() {
       </div>
       <div class="muted">${escapeHtml(sname(o.store_id))}</div>
       <div class="muted">${escapeHtml(t("cust_label", { name: o.customer_name || "—" }))}</div>
+      <div class="muted">${escapeHtml(t("grade_label", { grade: gradeLabel(o.customer_grade) }))}</div>
       <div class="muted">${escapeHtml(t("pickup_at", { time: formatTime(o.pickup_time), amount: money(o.total) }))}</div>
       <ul class="item-list">${(o.items || [])
         .map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}</li>`)

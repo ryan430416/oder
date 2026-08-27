@@ -15,6 +15,7 @@ if (!c.items.length) {
 }
 
 qs("#custName").value = session.name && session.name !== "學生小明" ? session.name : "";
+qs("#custGrade").value = session.grade || "";
 
 const store = await api.getStore(c.store_id);
 const pickup = qs("#pickup");
@@ -77,7 +78,7 @@ qs("#summary").innerHTML = `
 
 confirmButton.addEventListener("click", async () => {
   if (pageError || !pickup.value) return;
-  const named = auth.setCustomerName(qs("#custName").value);
+  const named = auth.setCustomerProfile(qs("#custName").value, qs("#custGrade").value);
   if (!named.ok) {
     msg.textContent = t(named.code);
     return;
@@ -87,6 +88,7 @@ confirmButton.addEventListener("click", async () => {
   const res = await api.createOrder({
     customer_id: session.user_id,
     customer_name: session.name,
+    customer_grade: session.grade,
     store_id: c.store_id,
     pickup_time: pickup.value,
     payment_method: qs("#pay").value,
