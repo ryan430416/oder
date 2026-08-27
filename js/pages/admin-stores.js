@@ -4,8 +4,10 @@ import { t, storeLabel } from "../i18n.js";
 import { bootAdmin } from "../admin-boot.js";
 import { mountTimePick, mountIconPick } from "../easy-pick.js";
 import { escapeAttr, escapeHtml } from "../html.js";
+import { mountPasswordToggles } from "../password-toggle.js";
 
 if (!bootAdmin()) throw new Error("admin");
+mountPasswordToggles();
 
 const form = qs("#form");
 const list = qs("#list");

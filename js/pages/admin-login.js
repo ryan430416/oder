@@ -1,8 +1,10 @@
 import { auth } from "../auth.js";
 import { qs } from "../nav.js";
 import { initI18n, t } from "../i18n.js";
+import { mountPasswordToggles } from "../password-toggle.js";
 
 initI18n();
+mountPasswordToggles();
 const s = auth.getSession();
 if (s && s.role === "admin") location.href = "dashboard.html";
 

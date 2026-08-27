@@ -204,6 +204,23 @@
   border-radius: 10px;
 }
 
+.login-form .password-show {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0 2px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.login-form .password-show input {
+  width: 20px;
+  min-height: 20px;
+  margin: 0;
+  padding: 0;
+}
+
 .easy-form label {
   font-size: 1.05rem;
   font-weight: 700;
