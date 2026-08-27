@@ -6,6 +6,11 @@
   text-decoration: none;
 }
 
+.store-card.is-closed {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .store-emoji {
   font-size: 2rem;
   text-align: center;

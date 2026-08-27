@@ -5,6 +5,7 @@ import { money } from "../format.js";
 import { qs } from "../nav.js";
 import { initI18n, t, storeLabel, productLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
+import { escapeAttr, escapeHtml } from "../html.js";
 
 initI18n();
 auth.ensureCustomer();
@@ -29,23 +30,37 @@ async function render() {
   const store = await api.getStore(cur.store_id);
   const name = store ? storeLabel(store).name : cur.store_id;
   hint.textContent = t("cart_store", { name, id: cur.store_id });
+  const products = store ? await api.getProducts(cur.store_id) : [];
+  const livePrices = new Map(products.map((product) => [product.product_id, Number(product.price)]));
+  let total = 0;
   lines.innerHTML = cur.items
     .map(
-      (i) => `
+      (i) => {
+        const unitPrice = livePrices.has(i.product_id) ? livePrices.get(i.product_id) : Number(i.unit_price);
+        total += unitPrice * i.quantity;
+        return `
     <div class="card cart-line">
       <div>
-        <strong>${productLabel(i.product_id, i.product_name)}</strong>
-        <div class="muted">${money(i.unit_price)} × ${i.quantity} = ${money(i.unit_price * i.quantity)}</div>
+        <strong>${escapeHtml(productLabel(i.product_id, i.product_name))}</strong>
+        <div class="muted">${money(unitPrice)} × ${i.quantity} = ${money(unitPrice * i.quantity)}</div>
       </div>
       <div class="qty">
-        <button type="button" data-id="${i.product_id}" data-d="-1">−</button>
-        <input type="number" min="1" max="99" inputmode="numeric" data-qty="${i.product_id}" value="${i.quantity}" />
-        <button type="button" data-id="${i.product_id}" data-d="1">+</button>
+        <button type="button" data-id="${escapeAttr(i.product_id)}" data-d="-1">−</button>
+        <input aria-label="${escapeAttr(productLabel(i.product_id, i.product_name))}" type="number" min="1" max="99" inputmode="numeric" data-qty="${escapeAttr(i.product_id)}" value="${i.quantity}" />
+        <button type="button" data-id="${escapeAttr(i.product_id)}" data-d="1">+</button>
       </div>
-    </div>`
+    </div>`;
+      }
     )
     .join("");
-  totalEl.textContent = money(cart.total());
+  totalEl.textContent = money(total);
+  go.setAttribute("aria-disabled", store?.status === "open" ? "false" : "true");
+  if (store?.status !== "open") {
+    go.style.pointerEvents = "none";
+    go.style.opacity = "0.5";
+    hint.textContent = t(store ? "store_closed" : "no_store");
+    return;
+  }
   go.style.pointerEvents = "";
   go.style.opacity = "";
 }

@@ -5,6 +5,7 @@ import { qs } from "../nav.js";
 import { initI18n, t, productLabel, productDesc, categoryLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
 import { mountIconPick } from "../easy-pick.js";
+import { escapeAttr, escapeHtml } from "../html.js";
 
 initI18n();
 auth.requireRole("store", "index.html");
@@ -41,14 +42,14 @@ async function render() {
     .map(
       (p) => `
     <article class="card">
-      <strong>${p.image || ""} ${productLabel(p.product_id, p.product_name)}</strong>
-      <div class="muted">${categoryLabel(p.category)} · ${p.product_id}</div>
-      <div class="muted">${productDesc(p.product_id, p.description)}</div>
+      <strong>${escapeHtml(p.image || "")} ${escapeHtml(productLabel(p.product_id, p.product_name))}</strong>
+      <div class="muted">${escapeHtml(categoryLabel(p.category))} · ${escapeHtml(p.product_id)}</div>
+      <div class="muted">${escapeHtml(productDesc(p.product_id, p.description))}</div>
       <div>${money(p.price)}</div>
       <span class="badge ${p.status === "active" ? "" : "sold"}">${p.status === "active" ? t("listed") : t("soldout")}</span>
       <div class="row-actions">
-        <button class="btn btn-ghost" type="button" data-edit="${p.product_id}">${t("edit")}</button>
-        <button class="btn btn-danger" type="button" data-del="${p.product_id}">${t("delete")}</button>
+        <button class="btn btn-ghost" type="button" data-edit="${escapeAttr(p.product_id)}">${escapeHtml(t("edit"))}</button>
+        <button class="btn btn-danger" type="button" data-del="${escapeAttr(p.product_id)}">${escapeHtml(t("delete"))}</button>
       </div>
     </article>`
     )

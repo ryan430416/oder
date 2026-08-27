@@ -20,15 +20,15 @@
   </header>
   <main class="wrap">
     <div class="card checkout-block">
-      <strong data-i18n="cust_name"></strong>
-      <input id="custName" class="search" style="margin:10px 0 0" autocomplete="name" />
+      <label for="custName"><strong data-i18n="cust_name"></strong></label>
+      <input id="custName" class="search" style="margin:10px 0 0" autocomplete="name" required />
     </div>
     <div class="card checkout-block">
-      <strong data-i18n="pickup_time">取餐時間</strong>
+      <label for="pickup"><strong data-i18n="pickup_time">取餐時間</strong></label>
       <select id="pickup" class="search" style="margin:10px 0 0"></select>
     </div>
     <div class="card checkout-block">
-      <strong data-i18n="payment">付款方式</strong>
+      <label for="pay"><strong data-i18n="payment">付款方式</strong></label>
       <select id="pay" class="search" style="margin:10px 0 0">
         <option value="cash" data-i18n="pay_cash">現場付款（取餐時）</option>
         <option value="campus" data-i18n="pay_campus">校園儲值（示範）</option>

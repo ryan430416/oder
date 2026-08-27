@@ -22,10 +22,10 @@
     <p class="sub" data-i18n="admin_stores_sub"></p>
     <form class="card login-form easy-form" id="form">
       <input type="hidden" name="store_id" />
-      <label data-i18n="form_store_name"></label>
-      <input name="store_name" required />
-      <label data-i18n="form_desc"></label>
-      <textarea name="description" rows="2"></textarea>
+      <label for="storeName" data-i18n="form_store_name"></label>
+      <input id="storeName" name="store_name" required />
+      <label for="storeDescription" data-i18n="form_desc"></label>
+      <textarea id="storeDescription" name="description" rows="2"></textarea>
       <label data-i18n="form_open"></label>
       <div id="openPick"></div>
       <label data-i18n="form_close"></label>
@@ -33,15 +33,15 @@
       <label data-i18n="form_image"></label>
       <div id="iconPick"></div>
       <div id="resetBox" hidden>
-        <label data-i18n="new_password"></label>
-        <input name="new_password" type="password" autocomplete="new-password" />
+        <label for="newStorePassword" data-i18n="new_password"></label>
+        <input id="newStorePassword" name="new_password" type="password" minlength="4" autocomplete="new-password" />
         <button class="btn btn-ghost btn-block" type="button" id="resetPw" style="margin-top:8px" data-i18n="reset_pw"></button>
       </div>
       <div id="loginFields">
-        <label data-i18n="store_login_acc"></label>
-        <input name="username" autocomplete="off" />
-        <label data-i18n="store_login_pwd"></label>
-        <input name="password" type="password" autocomplete="new-password" />
+        <label for="newStoreUsername" data-i18n="store_login_acc"></label>
+        <input id="newStoreUsername" name="username" autocomplete="off" />
+        <label for="newStoreLoginPassword" data-i18n="store_login_pwd"></label>
+        <input id="newStoreLoginPassword" name="password" type="password" minlength="4" autocomplete="new-password" />
       </div>
       <p class="muted" id="msg"></p>
       <button class="btn btn-block" type="submit" style="margin-top:12px" id="submitBtn" data-i18n="form_add_store"></button>

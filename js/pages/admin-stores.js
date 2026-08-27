@@ -3,6 +3,7 @@ import { qs } from "../nav.js";
 import { t, storeLabel } from "../i18n.js";
 import { bootAdmin } from "../admin-boot.js";
 import { mountTimePick, mountIconPick } from "../easy-pick.js";
+import { escapeAttr, escapeHtml } from "../html.js";
 
 if (!bootAdmin()) throw new Error("admin");
 
@@ -52,19 +53,19 @@ async function render() {
       const open = s.status === "open";
       return `
       <article class="card">
-        <strong>${s.image || "🏪"} ${lab.name}</strong>
-        <div class="muted">${s.store_id}</div>
+        <strong>${escapeHtml(s.image || "🏪")} ${escapeHtml(lab.name)}</strong>
+        <div class="muted">${escapeHtml(s.store_id)}</div>
         ${resetIds.has(s.store_id) ? `<div class="badge off">${t("pending_reset")}</div>` : ""}
-        <div class="muted">${lab.desc}</div>
-        <div class="muted">${s.open_time}–${s.close_time}</div>
+        <div class="muted">${escapeHtml(lab.desc)}</div>
+        <div class="muted">${escapeHtml(s.open_time)}–${escapeHtml(s.close_time)}</div>
         <span class="badge ${open ? "" : "off"}">${open ? t("open") : t("closed")}</span>
         <div class="row-actions">
-          <button class="btn btn-ghost" type="button" data-edit="${s.store_id}">${t("edit")}</button>
+          <button class="btn btn-ghost" type="button" data-edit="${escapeAttr(s.store_id)}">${escapeHtml(t("edit"))}</button>
           <a class="btn btn-ghost" href="products.html?store_id=${encodeURIComponent(s.store_id)}">${t("go_products")}</a>
-          <button class="btn ${open ? "btn-danger" : ""}" type="button" data-toggle="${s.store_id}">${
+          <button class="btn ${open ? "btn-danger" : ""}" type="button" data-toggle="${escapeAttr(s.store_id)}">${
             open ? t("disable_store") : t("enable_store")
           }</button>
-          <button class="btn btn-danger" type="button" data-del="${s.store_id}">${t("delete")}</button>
+          <button class="btn btn-danger" type="button" data-del="${escapeAttr(s.store_id)}">${escapeHtml(t("delete"))}</button>
         </div>
       </article>`;
     })
