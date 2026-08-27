@@ -4,6 +4,7 @@ import { cart } from "../cart.js";
 import { money } from "../format.js";
 import { qs } from "../nav.js";
 import { initI18n, t, storeLabel, productLabel, productDesc, categoryLabel } from "../i18n.js";
+import { escapeAttr, escapeHtml } from "../html.js";
 
 initI18n();
 auth.ensureCustomer();
@@ -12,12 +13,14 @@ const params = new URLSearchParams(location.search);
 const storeId = params.get("store_id") || "";
 const store = await api.getStore(storeId);
 if (!store) {
-  location.href = "index.html";
+  location.replace("index.html");
+  throw new Error("store_not_found");
 }
 
 const lab = storeLabel(store);
 qs("#storeName").textContent = lab.name;
 qs("#storeDesc").textContent = `${lab.desc} · ${store.open_time}–${store.close_time}`;
+const storeClosed = store.status !== "open";
 
 function refreshBadge() {
   const n = cart.count();
@@ -38,7 +41,7 @@ function drawCats() {
   catsEl.innerHTML = cats
     .map((c) => {
       const label = c === ALL ? t("cat_all") : categoryLabel(c);
-      return `<button type="button" data-cat="${c}" class="${c === cat ? "on" : ""}">${label}</button>`;
+      return `<button type="button" data-cat="${escapeAttr(c)}" class="${c === cat ? "on" : ""}">${escapeHtml(label)}</button>`;
     })
     .join("");
 }
@@ -47,16 +50,16 @@ function drawMenu() {
   const rows = products.filter((p) => cat === ALL || p.category === cat);
   menuEl.innerHTML = rows
     .map((p) => {
-      const sold = p.status !== "active";
+      const sold = p.status !== "active" || storeClosed;
       return `
       <article class="card product">
         <div>
-          <h3>${p.image} ${productLabel(p.product_id, p.product_name)}</h3>
-          <div class="muted">${productDesc(p.product_id, p.description)}</div>
+          <h3>${escapeHtml(p.image)} ${escapeHtml(productLabel(p.product_id, p.product_name))}</h3>
+          <div class="muted">${escapeHtml(productDesc(p.product_id, p.description))}</div>
           <div class="price">${money(p.price)}</div>
-          ${sold ? `<span class="badge sold">${t("soldout")}</span>` : ""}
+          ${sold ? `<span class="badge sold">${escapeHtml(storeClosed ? t("store_closed") : t("soldout"))}</span>` : ""}
         </div>
-        <button class="btn" data-add="${p.product_id}" ${sold ? "disabled" : ""}>${t("add")}</button>
+        <button class="btn" data-add="${escapeAttr(p.product_id)}" ${sold ? "disabled" : ""}>${escapeHtml(t("add"))}</button>
       </article>`;
     })
     .join("");
@@ -72,7 +75,7 @@ catsEl.addEventListener("click", (e) => {
 
 menuEl.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-add]");
-  if (!btn) return;
+  if (!btn || storeClosed) return;
   const product = products.find((p) => p.product_id === btn.dataset.add);
   const result = cart.add(product, 1);
   if (!result.ok && result.code === "OTHER_STORE") {

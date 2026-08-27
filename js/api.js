@@ -6,7 +6,7 @@
 import { config } from "./config.js";
 import { auth } from "./auth.js";
 import { getDb, saveDb } from "./mock/db.js";
-import { toTime24 } from "./format.js";
+import { isPickupTimeAllowed, toTime24 } from "./format.js";
 
 function delay(ms = 80) {
   return new Promise((r) => setTimeout(r, ms));
@@ -85,25 +85,38 @@ export const api = {
     const name = String(customer_name || "").trim();
     if (!name) return { ok: false, code: "need_name" };
     const db = getDb();
+    const store = db.Stores.find((s) => s.store_id === store_id);
+    if (!store) return { ok: false, code: "no_store" };
+    if (store.status !== "open") return { ok: false, code: "store_closed" };
+    if (!isPickupTimeAllowed(store, pickup_time)) return { ok: false, code: "invalid_pickup" };
+    if (!Array.isArray(items) || !items.length) return { ok: false, code: "invalid_items" };
+
     const order_id = newId("ORD");
     const now = new Date().toISOString();
     let total = 0;
-    const orderItems = items.map((it) => {
-      const product = db.Products.find((p) => p.product_id === it.product_id);
-      const unit = product ? product.price : it.unit_price;
+    const orderItems = [];
+    for (const it of items) {
+      const product = db.Products.find(
+        (p) => p.product_id === it.product_id && p.store_id === store_id && p.status === "active"
+      );
       const qty = Number(it.quantity);
+      if (!product || !Number.isInteger(qty) || qty < 1 || qty > 99) {
+        return { ok: false, code: "invalid_items" };
+      }
+      const unit = Number(product.price);
+      if (!Number.isFinite(unit) || unit < 0) return { ok: false, code: "invalid_items" };
       const subtotal = unit * qty;
       total += subtotal;
-      return {
+      orderItems.push({
         order_item_id: newId("OI"),
         order_id,
         product_id: it.product_id,
-        product_name: product ? product.product_name : it.product_name,
+        product_name: product.product_name,
         unit_price: unit,
         quantity: qty,
         subtotal,
-      };
-    });
+      });
+    }
     const order = {
       order_id,
       store_id,
@@ -111,7 +124,7 @@ export const api = {
       customer_name: name,
       pickup_time,
       total,
-      payment_method,
+      payment_method: ["cash", "campus"].includes(payment_method) ? payment_method : "cash",
       status: "pending",
       created_at: now,
       updated_at: now,
@@ -166,6 +179,15 @@ export const api = {
     if (!order) return { ok: false, message: "找不到訂單" };
     if (order.store_id !== storeId) {
       return { ok: false, message: "無權限操作此訂單" };
+    }
+    const transitions = {
+      pending: ["accepted", "rejected"],
+      accepted: ["preparing"],
+      preparing: ["ready"],
+      ready: ["completed"],
+    };
+    if (!transitions[order.status]?.includes(nextStatus)) {
+      return { ok: false, code: "invalid_status", message: "訂單狀態順序不正確" };
     }
     order.status = nextStatus;
     order.updated_at = new Date().toISOString();
@@ -274,7 +296,7 @@ export const api = {
     await delay();
     if (!requireAdmin()) return { ok: false, code: "not_admin" };
     const pwd = String(newPassword || "");
-    if (pwd.length < 4) return { ok: false, code: "bad_login" };
+    if (pwd.length < 4) return { ok: false, code: "password_too_short" };
     const db = getDb();
     const user = db.Users.find((u) => u.role === "store" && u.store_id === storeId);
     if (!user) return { ok: false, code: "no_store" };
@@ -317,7 +339,9 @@ export const api = {
     if (!requireAdmin()) return { ok: false, code: "not_admin" };
     const db = getDb();
     const username = String(payload.username || "").trim();
-    if (!username || !payload.password) return { ok: false, code: "bad_login" };
+    if (!username || String(payload.password || "").length < 4) {
+      return { ok: false, code: "password_too_short" };
+    }
     if (db.Accounts.some((a) => a.username === username)) {
       return { ok: false, code: "username_taken" };
     }
@@ -354,7 +378,11 @@ export const api = {
     const db = getDb();
     const store = db.Stores.find((s) => s.store_id === storeId);
     if (!store) return { ok: false, code: "no_store" };
-    if (patch.store_name != null) store.store_name = String(patch.store_name).trim();
+    if (patch.store_name != null) {
+      const name = String(patch.store_name).trim();
+      if (!name) return { ok: false, code: "need_store_name" };
+      store.store_name = name;
+    }
     if (patch.description != null) store.description = String(patch.description).trim();
     if (patch.open_time != null) store.open_time = toTime24(patch.open_time, store.open_time);
     if (patch.close_time != null) store.close_time = toTime24(patch.close_time, store.close_time);
@@ -393,13 +421,15 @@ export const api = {
     if (!db.Stores.some((s) => s.store_id === store_id)) return { ok: false, code: "no_store" };
     const product_name = String(payload.product_name || "").trim();
     if (!product_name) return { ok: false, code: "need_product_name" };
+    const price = Number(payload.price);
+    if (!Number.isFinite(price) || price < 0) return { ok: false, code: "invalid_price" };
     const product = {
       product_id: newId("P"),
       store_id,
       category: String(payload.category || "").trim() || "—",
       product_name,
       description: String(payload.description || "").trim(),
-      price: Number(payload.price) || 0,
+      price,
       image: String(payload.image || "🍽️").trim() || "🍽️",
       status: payload.status === "soldout" ? "soldout" : "active",
     };
@@ -411,6 +441,7 @@ export const api = {
   async updateProduct(productId, patch) {
     await delay();
     const session = auth.getSession();
+    if (!session) return { ok: false, code: "bad_login" };
     const db = getDb();
     const product = db.Products.find((p) => p.product_id === productId);
     if (!product) return { ok: false, code: "no_product" };
@@ -419,10 +450,18 @@ export const api = {
     } else if (session.role !== "admin") {
       return { ok: false, code: "not_admin" };
     }
-    if (patch.product_name != null) product.product_name = String(patch.product_name).trim();
+    if (patch.product_name != null) {
+      const name = String(patch.product_name).trim();
+      if (!name) return { ok: false, code: "need_product_name" };
+      product.product_name = name;
+    }
     if (patch.category != null) product.category = String(patch.category).trim();
     if (patch.description != null) product.description = String(patch.description).trim();
-    if (patch.price != null) product.price = Number(patch.price) || 0;
+    if (patch.price != null) {
+      const price = Number(patch.price);
+      if (!Number.isFinite(price) || price < 0) return { ok: false, code: "invalid_price" };
+      product.price = price;
+    }
     if (patch.image != null) product.image = String(patch.image).trim() || product.image;
     if (patch.status === "active" || patch.status === "soldout") product.status = patch.status;
     saveDb(db);
@@ -432,6 +471,7 @@ export const api = {
   async deleteProduct(productId) {
     await delay();
     const session = auth.getSession();
+    if (!session) return { ok: false, code: "bad_login" };
     const db = getDb();
     const product = db.Products.find((p) => p.product_id === productId);
     if (!product) return { ok: false, code: "no_product" };
@@ -496,4 +536,3 @@ export const api = {
     };
   },
 };
-

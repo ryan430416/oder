@@ -4,6 +4,7 @@ import { qs } from "../nav.js";
 import { t, storeLabel, productLabel, productDesc, categoryLabel } from "../i18n.js";
 import { bootAdmin } from "../admin-boot.js";
 import { mountIconPick } from "../easy-pick.js";
+import { escapeAttr, escapeHtml } from "../html.js";
 
 if (!bootAdmin()) throw new Error("admin");
 
@@ -26,7 +27,7 @@ async function fillStores() {
   const stores = await api.getStores();
   const want = new URLSearchParams(location.search).get("store_id") || "";
   pick.innerHTML = stores
-    .map((s) => `<option value="${s.store_id}">${storeLabel(s).name} (${s.store_id})</option>`)
+    .map((s) => `<option value="${escapeAttr(s.store_id)}">${escapeHtml(storeLabel(s).name)} (${escapeHtml(s.store_id)})</option>`)
     .join("");
   if (!stores.length) pick.innerHTML = `<option value="">${t("no_stores")}</option>`;
   if (want && stores.some((s) => s.store_id === want)) pick.value = want;
@@ -47,14 +48,14 @@ async function render() {
     .map(
       (p) => `
     <article class="card">
-      <strong>${p.image || ""} ${productLabel(p.product_id, p.product_name)}</strong>
-      <div class="muted">${categoryLabel(p.category)} · ${p.product_id}</div>
-      <div class="muted">${productDesc(p.product_id, p.description)}</div>
+      <strong>${escapeHtml(p.image || "")} ${escapeHtml(productLabel(p.product_id, p.product_name))}</strong>
+      <div class="muted">${escapeHtml(categoryLabel(p.category))} · ${escapeHtml(p.product_id)}</div>
+      <div class="muted">${escapeHtml(productDesc(p.product_id, p.description))}</div>
       <div>${money(p.price)}</div>
       <span class="badge ${p.status === "active" ? "" : "sold"}">${p.status === "active" ? t("listed") : t("soldout")}</span>
       <div class="row-actions">
-        <button class="btn btn-ghost" type="button" data-edit="${p.product_id}">${t("edit")}</button>
-        <button class="btn btn-danger" type="button" data-del="${p.product_id}">${t("delete")}</button>
+        <button class="btn btn-ghost" type="button" data-edit="${escapeAttr(p.product_id)}">${escapeHtml(t("edit"))}</button>
+        <button class="btn btn-danger" type="button" data-del="${escapeAttr(p.product_id)}">${escapeHtml(t("delete"))}</button>
       </div>
     </article>`
     )

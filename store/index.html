@@ -13,10 +13,10 @@
     <div class="js-lang"></div>
     <h1 data-i18n="store_login">店家登入</h1>
     <form class="login-form" id="form">
-      <label data-i18n="username">帳號</label>
-      <input name="username" autocomplete="username" required />
-      <label data-i18n="password">密碼</label>
-      <input name="password" type="password" autocomplete="current-password" required />
+      <label for="storeUsername" data-i18n="username">帳號</label>
+      <input id="storeUsername" name="username" autocomplete="username" required />
+      <label for="storePassword" data-i18n="password">密碼</label>
+      <input id="storePassword" name="password" type="password" autocomplete="current-password" required />
       <p class="muted" id="err"></p>
       <button class="btn btn-block" type="submit" style="margin-top:16px" data-i18n="login">登入</button>
     </form>

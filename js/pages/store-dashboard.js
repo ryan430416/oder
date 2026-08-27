@@ -5,6 +5,7 @@ import { qs } from "../nav.js";
 import { initI18n, t, statusLabel, productLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
 import { ORDER_FILTERS, watchOrders } from "../order-filters.js";
+import { escapeAttr, escapeHtml } from "../html.js";
 
 initI18n();
 const session = auth.requireRole("store", "index.html");
@@ -68,14 +69,14 @@ async function render() {
       last = dk;
     }
     html += `
-    <article class="card order-card" data-oid="${o.order_id}">
+    <article class="card order-card" data-oid="${escapeAttr(o.order_id)}">
       <div class="order-meta">
-        <strong>${o.order_id}</strong>
-        <span class="status ${o.status}">${statusLabel(o.status)}</span>
+        <strong>${escapeHtml(o.order_id)}</strong>
+        <span class="status ${escapeAttr(o.status)}">${escapeHtml(statusLabel(o.status))}</span>
       </div>
-      <div class="muted">${t("cust_label", { name: o.customer_name || "—" })}</div>
-      <div class="muted">${t("pickup_at", { time: formatTime(o.pickup_time), amount: money(o.total) })}</div>
-      <ul class="item-list">${o.items.map((i) => `<li>${productLabel(i.product_id, i.product_name)} × ${i.quantity}</li>`).join("")}</ul>
+      <div class="muted">${escapeHtml(t("cust_label", { name: o.customer_name || "—" }))}</div>
+      <div class="muted">${escapeHtml(t("pickup_at", { time: formatTime(o.pickup_time), amount: money(o.total) }))}</div>
+      <ul class="item-list">${o.items.map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}</li>`).join("")}</ul>
       <div class="row-actions">${actions(o.status)}</div>
     </article>`;
   });

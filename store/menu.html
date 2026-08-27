@@ -23,18 +23,18 @@
     <p class="sub" data-i18n="menu_manage_sub"></p>
     <form class="card login-form easy-form" id="form">
       <input type="hidden" name="product_id" />
-      <label data-i18n="form_product_name"></label>
-      <input name="product_name" required />
-      <label data-i18n="form_category"></label>
-      <input name="category" />
-      <label data-i18n="form_desc"></label>
-      <textarea name="description" rows="2"></textarea>
-      <label data-i18n="form_price"></label>
-      <input name="price" type="number" min="0" step="1" inputmode="numeric" required />
+      <label for="storeProductName" data-i18n="form_product_name"></label>
+      <input id="storeProductName" name="product_name" required />
+      <label for="storeProductCategory" data-i18n="form_category"></label>
+      <input id="storeProductCategory" name="category" />
+      <label for="storeProductDescription" data-i18n="form_desc"></label>
+      <textarea id="storeProductDescription" name="description" rows="2"></textarea>
+      <label for="storeProductPrice" data-i18n="form_price"></label>
+      <input id="storeProductPrice" name="price" type="number" min="0" step="1" inputmode="numeric" required />
       <label data-i18n="form_image"></label>
       <div id="iconPick"></div>
-      <label data-i18n="form_status"></label>
-      <select name="status">
+      <label for="storeProductStatus" data-i18n="form_status"></label>
+      <select id="storeProductStatus" name="status">
         <option value="active" data-i18n="listed"></option>
         <option value="soldout" data-i18n="soldout"></option>
       </select>

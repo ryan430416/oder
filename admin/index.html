@@ -13,10 +13,10 @@
     <div class="js-lang"></div>
     <h1 data-i18n="admin_login">系統管理</h1>
     <form class="login-form" id="form">
-      <label data-i18n="username">帳號</label>
-      <input name="username" required />
-      <label data-i18n="password">密碼</label>
-      <input name="password" type="password" required />
+      <label for="adminUsername" data-i18n="username">帳號</label>
+      <input id="adminUsername" name="username" autocomplete="username" required />
+      <label for="adminPassword" data-i18n="password">密碼</label>
+      <input id="adminPassword" name="password" type="password" autocomplete="current-password" required />
       <p class="muted" id="err"></p>
       <button class="btn btn-block" type="submit" style="margin-top:16px" data-i18n="login">登入</button>
     </form>

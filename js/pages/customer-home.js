@@ -4,6 +4,7 @@ import { cart } from "../cart.js";
 import { qs } from "../nav.js";
 import { initI18n, t, storeLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
+import { escapeHtml } from "../html.js";
 
 initI18n();
 const session = auth.ensureCustomer();
@@ -41,16 +42,21 @@ function render(filter = "") {
   listEl.innerHTML = rows
     .map((s) => {
       const lab = storeLabel(s);
+      const open = isOpen(s);
+      const tag = open ? "a" : "article";
+      const link = open
+        ? ` href="store.html?store_id=${encodeURIComponent(s.store_id)}"`
+        : ` aria-disabled="true"`;
       return `
-    <a class="card store-card" href="store.html?store_id=${encodeURIComponent(s.store_id)}">
-      <div class="store-emoji">${s.image || "🏪"}</div>
+    <${tag} class="card store-card ${open ? "" : "is-closed"}"${link}>
+      <div class="store-emoji">${escapeHtml(s.image || "🏪")}</div>
       <div>
-        <strong>${lab.name}</strong>
-        <div class="muted">${lab.desc}</div>
-        <div class="muted">${s.open_time}–${s.close_time}</div>
+        <strong>${escapeHtml(lab.name)}</strong>
+        <div class="muted">${escapeHtml(lab.desc)}</div>
+        <div class="muted">${escapeHtml(s.open_time)}–${escapeHtml(s.close_time)}</div>
       </div>
-      <span class="badge ${isOpen(s) ? "" : "off"}">${isOpen(s) ? t("open") : t("closed")}</span>
-    </a>`;
+      <span class="badge ${open ? "" : "off"}">${escapeHtml(open ? t("open") : t("closed"))}</span>
+    </${tag}>`;
     })
     .join("");
   if (!rows.length) listEl.innerHTML = `<p class="empty">${t("no_stores")}</p>`;
