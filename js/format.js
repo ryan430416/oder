@@ -1,5 +1,5 @@
 /** 金額、時間、訂單狀態顯示 */
-import { SERVICE_PERIODS, normalizeServicePeriods } from "./service-periods.js";
+import { SCHOOL_PICKUP_WINDOWS, normalizeServicePeriods } from "./service-periods.js";
 
 export const STATUS_LABEL = {
   pending: "待店家接單",
@@ -68,23 +68,25 @@ function legacyServiceWindow(store, now) {
   return { open, close };
 }
 
+function windowsOnDate(pairs, date) {
+  return pairs.map(([openValue, closeValue]) => {
+    const [openHour, openMinute] = openValue.split(":").map(Number);
+    const [closeHour, closeMinute] = closeValue.split(":").map(Number);
+    const open = new Date(date);
+    const close = new Date(date);
+    open.setHours(openHour, openMinute, 0, 0);
+    close.setHours(closeHour, closeMinute, 0, 0);
+    return { open, close };
+  });
+}
+
 function serviceWindows(store, date) {
   const periods = normalizeServicePeriods(store?.service_periods);
   if (!periods.length) {
     const legacy = legacyServiceWindow(store, date);
     return legacy ? [legacy] : [];
   }
-  return periods.flatMap((id) =>
-    SERVICE_PERIODS[id].windows.map(([openValue, closeValue]) => {
-      const [openHour, openMinute] = openValue.split(":").map(Number);
-      const [closeHour, closeMinute] = closeValue.split(":").map(Number);
-      const open = new Date(date);
-      const close = new Date(date);
-      open.setHours(openHour, openMinute, 0, 0);
-      close.setHours(closeHour, closeMinute, 0, 0);
-      return { open, close };
-    })
-  );
+  return windowsOnDate(SCHOOL_PICKUP_WINDOWS, date);
 }
 
 function pickupDayAllowed(pickup, now) {

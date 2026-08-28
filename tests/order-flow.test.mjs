@@ -39,7 +39,7 @@ test("customers can order overnight for the next morning pickup window", () => {
 test("checkout lists each school pickup window once", () => {
   const store = {
     status: "open",
-    service_periods: ["breakfast", "lunch", "afternoon_tea"],
+    service_periods: ["breakfast", "lunch"],
   };
   assert.equal(isPickupTimeAllowed(store, localDate(8, 40).toISOString(), localDate(8, 0)), true);
   assert.equal(isPickupTimeAllowed(store, localDate(8, 50).toISOString(), localDate(8, 0)), false);

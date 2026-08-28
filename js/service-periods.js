@@ -13,11 +13,13 @@ export const SERVICE_PERIODS = {
   },
   lunch: {
     open: "11:20",
-    close: "13:00",
+    close: "18:25",
     key: "period_lunch",
     windows: [
       ["11:20", "11:30"],
       ["12:15", "13:00"],
+      ["17:15", "17:30"],
+      ["18:15", "18:25"],
     ],
   },
   afternoon_tea: {
@@ -30,6 +32,16 @@ export const SERVICE_PERIODS = {
     ],
   },
 };
+
+export const SCHOOL_PICKUP_WINDOWS = [
+  ["08:35", "08:45"],
+  ["09:30", "09:40"],
+  ["10:25", "10:35"],
+  ["11:20", "11:30"],
+  ["12:15", "13:00"],
+  ["17:15", "17:30"],
+  ["18:15", "18:25"],
+];
 
 export function normalizeServicePeriods(value) {
   const source = Array.isArray(value) ? value : [];
