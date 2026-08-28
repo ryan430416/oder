@@ -32,15 +32,11 @@ test("customers can order overnight for the next morning pickup window", () => {
   assert.equal(isPickupTimeAllowed(store, nextBreakfast.toISOString(), morning), true);
   const lateNight = localDate(22, 0);
   assert.equal(isPickupTimeAllowed(store, nextBreakfast.toISOString(), lateNight), true);
-  const slots = pickupSlotsForStore(store, morning);
-  assert.ok(slots.some((slot) => new Date(slot.value).getDate() === 28 && new Date(slot.value).getHours() === 8));
-  assert.ok(slots.every((slot) => {
-    const date = new Date(slot.value);
-    return date.getDate() === 27 || date.getDate() === 28;
-  }));
+  const nightSlots = pickupSlotsForStore(store, lateNight);
+  assert.ok(nightSlots.some((slot) => slot.label === "08:35–08:45" && new Date(slot.value).getDate() === 28));
 });
 
-test("exact school pickup windows use five-minute slots", () => {
+test("checkout lists each school pickup window once", () => {
   const store = {
     status: "open",
     service_periods: ["breakfast", "lunch", "afternoon_tea"],
@@ -50,10 +46,33 @@ test("exact school pickup windows use five-minute slots", () => {
   assert.equal(isPickupTimeAllowed(store, localDate(12, 15).toISOString(), localDate(8, 0)), true);
   assert.equal(isPickupTimeAllowed(store, localDate(17, 20).toISOString(), localDate(16, 0)), true);
   assert.equal(isPickupTimeAllowed({ ...store, status: "closed" }, localDate(17, 20), localDate(16, 0)), false);
-  assert.ok(pickupSlotsForStore(store, localDate(8, 0)).every((slot) => {
-    const date = new Date(slot.value);
-    return date.getMinutes() % 5 === 0;
-  }));
+  const slots = pickupSlotsForStore(store, localDate(8, 0));
+  assert.deepEqual(
+    slots.map((slot) => slot.label),
+    [
+      "08:35–08:45",
+      "09:30–09:40",
+      "10:25–10:35",
+      "11:20–11:30",
+      "12:15–13:00",
+      "17:15–17:30",
+      "18:15–18:25",
+    ]
+  );
+  const eveningSlots = pickupSlotsForStore(store, localDate(22, 0));
+  assert.deepEqual(
+    eveningSlots.map((slot) => slot.label),
+    [
+      "08:35–08:45",
+      "09:30–09:40",
+      "10:25–10:35",
+      "11:20–11:30",
+      "12:15–13:00",
+      "17:15–17:30",
+      "18:15–18:25",
+    ]
+  );
+  assert.equal(new Date(eveningSlots[0].value).getDate(), 28);
 });
 
 test("legacy operating windows correctly cross midnight", () => {

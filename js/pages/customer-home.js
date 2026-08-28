@@ -6,7 +6,7 @@ import { initI18n, t, storeLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
 import { escapeHtml } from "../html.js";
 import { servicePeriodsLabel } from "../service-periods.js";
-import { formatTime, pickupSlotsForStore } from "../format.js";
+import { pickupSlotsForStore } from "../format.js";
 import { mountIcons } from "../icons.js";
 
 initI18n();
@@ -66,7 +66,7 @@ function render(filter = "") {
         <strong>${escapeHtml(lab.name)}</strong>
         <div class="muted">${escapeHtml(lab.desc)}</div>
         <div class="muted">${escapeHtml(servicePeriodsLabel(s.service_periods))}</div>
-        ${nextSlot ? `<div class="muted">${escapeHtml(t("next_pickup", { time: formatTime(nextSlot.value) }))}</div>` : ""}
+        ${nextSlot ? `<div class="muted">${escapeHtml(t("next_pickup", { time: nextSlot.label }))}</div>` : ""}
       </div>
       <span class="badge ${open ? "" : "off"}">${escapeHtml(open ? t("open") : t("closed"))}</span>
     </${tag}>`;

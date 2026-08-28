@@ -108,29 +108,22 @@ export function isPickupTimeAllowed(store, pickupTime, now = new Date()) {
 
 export function pickupSlotsForStore(store, now = new Date()) {
   if (!store || store.status !== "open") return [];
-  const slots = [];
-  const interval = normalizeServicePeriods(store.service_periods).length ? 5 : 15;
   const pad = (x) => String(x).padStart(2, "0");
+  const clock = (date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const earliest = new Date(now.getTime() + 15 * 60 * 1000);
+  const byLabel = new Map();
   for (let dayOffset = 0; dayOffset <= 1; dayOffset += 1) {
     const date = new Date(now);
     date.setDate(date.getDate() + dayOffset);
     for (const window of serviceWindows(store, date)) {
-      const earliest = new Date(Math.max(now.getTime() + 15 * 60 * 1000, window.open.getTime()));
-      earliest.setSeconds(0, 0);
-      earliest.setMinutes(Math.ceil(earliest.getMinutes() / interval) * interval);
-      for (
-        let time = earliest;
-        time <= window.close;
-        time = new Date(time.getTime() + interval * 60 * 1000)
-      ) {
-        slots.push({
-          value: time.toISOString(),
-          label: `${time.getMonth() + 1}/${time.getDate()} ${pad(time.getHours())}:${pad(time.getMinutes())}`,
-        });
+      if (window.open < earliest) continue;
+      const label = `${clock(window.open)}–${clock(window.close)}`;
+      if (!byLabel.has(label)) {
+        byLabel.set(label, { value: window.open.toISOString(), label });
       }
     }
   }
-  return slots;
+  return [...byLabel.values()];
 }
 
 /** Backwards-compatible default slots for pages that do not have store data. */
