@@ -356,6 +356,18 @@ begin
 end
 $$;
 
+create or replace function public.pickup_is_within_order_window(p_pickup timestamptz)
+returns boolean
+language sql
+stable
+set search_path = public
+as $$
+  select
+    p_pickup >= now() + interval '15 minutes'
+    and (p_pickup at time zone 'Asia/Taipei')::date
+        <= (timezone('Asia/Taipei', now()))::date + 1
+$$;
+
 create or replace function public.create_order(
   p_store_id uuid,
   p_customer_name text,
@@ -397,8 +409,7 @@ begin
 
   select * into v_store from public.stores where id = p_store_id and status = 'open' for update;
   if not found then return jsonb_build_object('ok', false, 'code', 'store_closed'); end if;
-  if p_pickup_time < now() + interval '15 minutes'
-     or p_pickup_time > now() + interval '24 hours'
+  if not public.pickup_is_within_order_window(p_pickup_time)
      or extract(minute from p_pickup_time)::integer % 5 <> 0
      or extract(second from p_pickup_time) <> 0
      or not public.is_service_pickup_time(
@@ -574,6 +585,7 @@ end
 $$;
 
 revoke execute on function public.is_service_pickup_time(text[], time) from public;
+revoke execute on function public.pickup_is_within_order_window(timestamptz) from public;
 revoke execute on function public.update_my_profile(text, text) from public;
 revoke execute on function public.create_order(uuid, text, timestamptz, text, jsonb, uuid) from public;
 revoke execute on function public.update_order_status(uuid, text) from public;

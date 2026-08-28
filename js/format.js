@@ -87,12 +87,19 @@ function serviceWindows(store, date) {
   );
 }
 
+function pickupDayAllowed(pickup, now) {
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const day = dateKey(pickup);
+  return day === dateKey(now) || day === dateKey(tomorrow);
+}
+
 export function isPickupTimeAllowed(store, pickupTime, now = new Date()) {
   if (!store || store.status !== "open") return false;
   const pickup = new Date(pickupTime);
   if (Number.isNaN(pickup.getTime())) return false;
   const earliest = new Date(now.getTime() + 15 * 60 * 1000);
-  if (pickup < earliest || pickup > new Date(now.getTime() + 24 * 60 * 60 * 1000)) return false;
+  if (pickup < earliest || !pickupDayAllowed(pickup, now)) return false;
   const interval = normalizeServicePeriods(store.service_periods).length ? 5 : 15;
   if (pickup.getMinutes() % interval !== 0 || pickup.getSeconds() !== 0) return false;
 
@@ -103,8 +110,8 @@ export function pickupSlotsForStore(store, now = new Date()) {
   if (!store || store.status !== "open") return [];
   const slots = [];
   const interval = normalizeServicePeriods(store.service_periods).length ? 5 : 15;
-  const lastAllowed = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  for (let dayOffset = 0; dayOffset <= 1 && slots.length < 48; dayOffset += 1) {
+  const pad = (x) => String(x).padStart(2, "0");
+  for (let dayOffset = 0; dayOffset <= 1; dayOffset += 1) {
     const date = new Date(now);
     date.setDate(date.getDate() + dayOffset);
     for (const window of serviceWindows(store, date)) {
@@ -113,13 +120,12 @@ export function pickupSlotsForStore(store, now = new Date()) {
       earliest.setMinutes(Math.ceil(earliest.getMinutes() / interval) * interval);
       for (
         let time = earliest;
-        time <= window.close && time <= lastAllowed && slots.length < 48;
+        time <= window.close;
         time = new Date(time.getTime() + interval * 60 * 1000)
       ) {
-        const p = (x) => String(x).padStart(2, "0");
         slots.push({
           value: time.toISOString(),
-          label: `${p(time.getHours())}:${p(time.getMinutes())}`,
+          label: `${time.getMonth() + 1}/${time.getDate()} ${pad(time.getHours())}:${pad(time.getMinutes())}`,
         });
       }
     }

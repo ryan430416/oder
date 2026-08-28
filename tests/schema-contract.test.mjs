@@ -4,6 +4,12 @@ import { readFile } from "node:fs/promises";
 
 const schema = await readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8");
 
+test("orders can be placed any time for today or tomorrow pickup windows", () => {
+  assert.match(schema, /pickup_is_within_order_window/);
+  assert.match(schema, /\(timezone\('Asia\/Taipei', now\(\)\)\)::date \+ 1/);
+  assert.doesNotMatch(schema, /p_pickup_time > now\(\) \+ interval '24 hours'/);
+});
+
 test("order RPC recalculates prices and enforces idempotency", () => {
   assert.match(schema, /unique\s*\(customer_id,\s*idempotency_key\)/i);
   assert.match(schema, /select \* into v_product from public\.products/i);

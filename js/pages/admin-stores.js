@@ -28,7 +28,7 @@ function fdObj(f) {
   };
 }
 
-function setPeriods(periods = ["breakfast", "lunch"]) {
+function setPeriods(periods = ["breakfast", "lunch", "afternoon_tea"]) {
   const selected = new Set(periods);
   form.querySelectorAll('[name="service_periods"]').forEach((input) => {
     input.checked = selected.has(input.value);

@@ -22,6 +22,24 @@ test("HTML escaping and image rendering reject executable URLs", () => {
   assert.doesNotMatch(productImageHtml("javascript:alert(1)", "Meal"), /javascript:/);
 });
 
+test("customers can order overnight for the next morning pickup window", () => {
+  const store = {
+    status: "open",
+    service_periods: ["breakfast", "lunch", "afternoon_tea"],
+  };
+  const morning = localDate(8, 0);
+  const nextBreakfast = new Date(2026, 7, 28, 8, 35);
+  assert.equal(isPickupTimeAllowed(store, nextBreakfast.toISOString(), morning), true);
+  const lateNight = localDate(22, 0);
+  assert.equal(isPickupTimeAllowed(store, nextBreakfast.toISOString(), lateNight), true);
+  const slots = pickupSlotsForStore(store, morning);
+  assert.ok(slots.some((slot) => new Date(slot.value).getDate() === 28 && new Date(slot.value).getHours() === 8));
+  assert.ok(slots.every((slot) => {
+    const date = new Date(slot.value);
+    return date.getDate() === 27 || date.getDate() === 28;
+  }));
+});
+
 test("exact school pickup windows use five-minute slots", () => {
   const store = {
     status: "open",
