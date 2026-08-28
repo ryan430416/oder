@@ -74,16 +74,17 @@ function serviceWindows(store, date) {
     const legacy = legacyServiceWindow(store, date);
     return legacy ? [legacy] : [];
   }
-  return periods.map((id) => {
-    const period = SERVICE_PERIODS[id];
-    const [openHour, openMinute] = period.open.split(":").map(Number);
-    const [closeHour, closeMinute] = period.close.split(":").map(Number);
-    const open = new Date(date);
-    const close = new Date(date);
-    open.setHours(openHour, openMinute, 0, 0);
-    close.setHours(closeHour, closeMinute, 0, 0);
-    return { open, close };
-  });
+  return periods.flatMap((id) =>
+    SERVICE_PERIODS[id].windows.map(([openValue, closeValue]) => {
+      const [openHour, openMinute] = openValue.split(":").map(Number);
+      const [closeHour, closeMinute] = closeValue.split(":").map(Number);
+      const open = new Date(date);
+      const close = new Date(date);
+      open.setHours(openHour, openMinute, 0, 0);
+      close.setHours(closeHour, closeMinute, 0, 0);
+      return { open, close };
+    })
+  );
 }
 
 export function isPickupTimeAllowed(store, pickupTime, now = new Date()) {
@@ -92,26 +93,28 @@ export function isPickupTimeAllowed(store, pickupTime, now = new Date()) {
   if (Number.isNaN(pickup.getTime())) return false;
   const earliest = new Date(now.getTime() + 15 * 60 * 1000);
   if (pickup < earliest || pickup > new Date(now.getTime() + 24 * 60 * 60 * 1000)) return false;
-  if (pickup.getMinutes() % 15 !== 0 || pickup.getSeconds() !== 0) return false;
+  const interval = normalizeServicePeriods(store.service_periods).length ? 5 : 15;
+  if (pickup.getMinutes() % interval !== 0 || pickup.getSeconds() !== 0) return false;
 
-  return serviceWindows(store, pickup).some((window) => pickup >= window.open && pickup < window.close);
+  return serviceWindows(store, pickup).some((window) => pickup >= window.open && pickup <= window.close);
 }
 
 export function pickupSlotsForStore(store, now = new Date()) {
   if (!store || store.status !== "open") return [];
   const slots = [];
+  const interval = normalizeServicePeriods(store.service_periods).length ? 5 : 15;
   const lastAllowed = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  for (let dayOffset = 0; dayOffset <= 1 && slots.length < 16; dayOffset += 1) {
+  for (let dayOffset = 0; dayOffset <= 1 && slots.length < 48; dayOffset += 1) {
     const date = new Date(now);
     date.setDate(date.getDate() + dayOffset);
     for (const window of serviceWindows(store, date)) {
       const earliest = new Date(Math.max(now.getTime() + 15 * 60 * 1000, window.open.getTime()));
       earliest.setSeconds(0, 0);
-      earliest.setMinutes(Math.ceil(earliest.getMinutes() / 15) * 15);
+      earliest.setMinutes(Math.ceil(earliest.getMinutes() / interval) * interval);
       for (
         let time = earliest;
-        time < window.close && time <= lastAllowed && slots.length < 16;
-        time = new Date(time.getTime() + 15 * 60 * 1000)
+        time <= window.close && time <= lastAllowed && slots.length < 48;
+        time = new Date(time.getTime() + interval * 60 * 1000)
       ) {
         const p = (x) => String(x).padStart(2, "0");
         slots.push({

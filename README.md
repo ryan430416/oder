@@ -1,81 +1,138 @@
-# 校園多店家線上點餐平台
+# 校園線上點餐平台
 
-純 HTML、CSS、Vanilla JS 的多語系點餐介面，可部署至 Vercel。
+手機優先的多店家校園點餐平台，提供繁體中文、泰文、緬甸文與英文介面，並包含顧客、店家及管理員三種角色。
 
-## 本機啟動
+## 系統架構
 
-ES Module 無法直接用 `file://` 開啟，請在專案目錄啟動 HTTP 伺服器：
+- Supabase Auth：顧客匿名 Auth、店家帳號、管理員帳號
+- Supabase Database + RLS：店家、商品、訂單、通知與角色權限
+- Supabase Storage：商品圖片
+- Supabase Realtime：顧客與店家的訂單狀態同步
+- Vercel Functions：只在伺服器端使用 service role 建立店家帳號及重設密碼
+- localStorage：僅保存購物車與介面語言，不保存帳密、Session 或圖片
+
+## 全新 Supabase 專案
+
+在 Supabase SQL Editor 執行 [`supabase/schema.sql`](supabase/schema.sql)。
+
+既有測試專案從舊版升級時：
+
+1. 先備份資料庫。
+2. 執行 `supabase/migrations/008_archive_legacy_backend.sql`。
+3. 立即執行 `supabase/schema.sql`。
+
+`008` 會將舊表重新命名為 `legacy_*_v1`，不會刪除原始資料；新 Auth 架構使用新的 UUID 資料表。舊帳號不能直接轉成 Supabase Auth，必須重新建立。
+
+### Auth 設定
+
+在 Supabase Dashboard → Authentication：
+
+1. 啟用 Email 登入。
+2. 啟用 Anonymous Sign-ins，供沒有帳密的顧客取得受 RLS 保護的身分。
+3. Site URL 設成實際 Vercel 網址。
+4. 測試環境若必須使用 `admin / 1234`，暫時將最短密碼設為 4；production 必須恢復至少 8 碼並停用該帳號。
+5. JWT expiry 建議設為 `86400` 秒；前端偵測過期後會導回登入頁。
+
+## 環境變數
+
+複製 [`.env.example`](.env.example)：
+
+```env
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+APP_ENV=development
+SHOW_TEST_ACCOUNT=true
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` 只允許放在本機命令列、CI Secret 或 Vercel Server Environment Variables。它不會由 `/api/config` 傳給瀏覽器，也不得寫進任何前端檔案。
+
+### Vercel
+
+在 Project Settings → Environment Variables 設定上述變數。Production 建議：
+
+```env
+APP_ENV=production
+SHOW_TEST_ACCOUNT=false
+```
+
+`vercel.json` 已設定 CSP、`frame-ancestors 'none'`、`X-Content-Type-Options`、Referrer Policy，並允許 Supabase API、Realtime、Storage 與 jsDelivr。
+
+### 本機
+
+推薦使用 Vercel CLI，讓 `/api/config` 與管理員 API 正常運作：
 
 ```bash
-npx --yes serve .
+npx vercel dev
 ```
 
-或：
+若只用 Python 靜態伺服器，複製 `js/config.local.example.js` 為 `js/config.local.js` 並填入 URL/anon key；管理員建立店家帳號功能仍需要 Vercel Functions。
 
-```powershell
-python -m http.server 8080
+## 測試管理員
+
+production migration 不會建立弱密碼。只在 development/testing 執行：
+
+```bash
+npm run seed:test-admin
 ```
 
-再開啟 `http://localhost:8080`。
+執行時必須由環境變數提供 `SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY` 與 `APP_ENV=development`。腳本在 `APP_ENV=production` 時會直接拒絕執行。
 
-## 目前模式
+預設測試登入：
 
-目前 `js/config.js` 已設定為 Supabase 共用後端模式。
+- 帳號：`admin`
+- 密碼：`1234`
 
-## 啟用 Supabase 共用後端
+前端會轉成內部測試 Email `admin@campus-order.test`。`SHOW_TEST_ACCOUNT=false` 時不顯示提示。
 
-1. 在 Supabase Dashboard 開啟 **SQL Editor**，依檔名順序執行
-   [`supabase/migrations`](supabase/migrations) 內所有 SQL。
-   已完成前兩個 migration 的專案，只需接著執行
-   `003_grade_photos_simple_flow.sql`、`004_high_school_grades.sql`、
-   `005_one_day_sessions.sql` 與 `006_store_service_periods.sql`。
-2. 從 Supabase 專案的 **Connect** 視窗複製 Project URL 與
-   publishable key（舊專案顯示為 anon key）。
-3. 填入 [`js/config.js`](js/config.js)：
+## 商品圖片規則
 
-```js
-USE_MOCK: false,
-SUPABASE_URL: "https://你的專案.supabase.co",
-SUPABASE_ANON_KEY: "你的 publishable key",
+- 圖片只保存於私有 `product-images` bucket。
+- 資料庫只保存 `image_path`；短效 signed URL 只在執行時產生，不寫入資料庫。
+- 禁止將 Base64、Data URL 或 Blob 字串寫入 products 或 localStorage。
+- 前端檢查實際檔案簽章，只接受 JPEG、PNG、WebP，原始檔最大 8MB。
+- 圖片依 EXIF 方向解碼，最長邊縮至 1600px，轉為約 0.8 品質 WebP，輸出必須小於 1MB。
+- 路徑固定為 `store_id/product_id/uuid.webp`。
+- Storage policy 限制店家只能寫入自己的 store_id 資料夾，管理員可管理全部，匿名使用者不可寫入。
+- 商品建立失敗會刪除暫存圖片；更換或永久刪除商品時會清理舊圖片。
+
+## 訂單安全
+
+`create_order` RPC 在同一個資料庫 transaction：
+
+- 驗證 Auth、店家狀態、取餐時段、商品店家、商品狀態與 1～99 數量
+- 從 products 重新取得價格並計算 subtotal/total
+- 使用 `(customer_id, idempotency_key)` 唯一限制防止重複訂單
+- 建立訂單、明細與店家通知
+
+狀態只能依序：
+
+`pending → accepted → preparing → ready → completed`
+
+`pending` 可拒絕；顧客只能取消自己的 pending 訂單。所有讀寫同時受 RLS 與 RPC 驗證。
+
+## 測試
+
+需要 Node.js 20 以上：
+
+```bash
+npm install
+npm test
 ```
 
-4. 將變更推到 GitHub，等待 Vercel 重新部署。
+Playwright 端對端測試需先準備獨立測試 Supabase/Vercel 環境：
 
-完成後，所有學生、店家與管理員只要使用同一個 Vercel 網址，就會讀寫同一份
-Supabase 資料。訂單頁使用 Supabase Realtime，並保留每 5 秒重新讀取作為斷線備援。
+```bash
+npx playwright install chromium
+E2E_BASE_URL=https://your-test-site.vercel.app npm run test:e2e
+```
 
-SQL migration 會建立 `admin / 1234` 與 `student / 1234`。店家帳號由管理員新增店家時建立。
-學生訪客會在各自瀏覽器產生不同的識別碼，因此不會看到其他學生的訂單。
+E2E 會在桌面及 360px 手機執行完整流程：管理員建立店家、店家上傳商品、顧客下單、店家接單、顧客即時看到狀態。
 
-> 此 migration 是學生測試版：保留自訂帳密，且為了匿名 Realtime 開放訂單資料讀取。
-> 不可直接當正式系統；正式上線前應改用 Supabase Auth 與使用者範圍 RLS。
+## 取餐時段
 
-示範帳號：
+- 早餐：08:35–08:45、09:30–09:40、10:25–10:35
+- 午餐：11:20–11:30、12:15–13:00
+- 下午茶：17:15–17:30、18:15–18:25
 
-| 帳號 | 密碼 | 角色 |
-|---|---|---|
-| `student` | `1234` | 顧客 |
-| `admin` | `1234` | 管理員 |
-
-店家帳號由管理員新增店家時建立。
-
-## 已完成
-
-- 顧客：店家列表、菜單、購物車、結帳、訂單與通知
-- 顧客資料包含姓名與高中一至三年級，訂單保留當時的年級
-- 店家：自己的訂單、待接單 → 可取餐 → 完成流程與菜單管理
-- 店家可複選早餐 08:30–10:30、午餐 11:00–13:00 營業時段
-- 店家與管理員可上傳餐點照片（最大 5MB）
-- 管理員：店家、餐點、訂單、使用者、評價與統計頁面
-- 中文、泰文、緬文、英文介面
-- 休息店家阻擋下單、依營業時間提供取餐時段
-- 商品、數量、價格、取餐時間與訂單狀態驗證
-- 動態內容輸出轉義，降低儲存型 XSS 風險
-
-## 正式上線前仍需完成
-
-1. 將測試帳密遷移到 Supabase Auth。
-2. 改用登入使用者範圍的 RLS，關閉匿名訂單讀取。
-3. 移除公開的示範帳號提示並更換正式管理員密碼。
-
-只把 `USE_MOCK` 改成 `false` 不夠；必須先執行 migration 並設定有效的 Supabase URL/key。
+每 5 分鐘提供一個取餐選項。

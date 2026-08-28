@@ -22,20 +22,32 @@ export const cart = {
   },
 
   add(product, qty = 1) {
+    const amount = Number(qty);
+    if (
+      (product.status && product.status !== "active") ||
+      !Number.isInteger(amount) ||
+      amount < 1 ||
+      amount > 99
+    ) {
+      return { ok: false, code: "INVALID_QUANTITY" };
+    }
     const c = this.get();
     if (c.store_id && c.store_id !== product.store_id) {
       return { ok: false, code: "OTHER_STORE" };
     }
     c.store_id = product.store_id;
     const found = c.items.find((i) => i.product_id === product.product_id);
-    if (found) found.quantity += qty;
+    if (found && found.quantity + amount > 99) {
+      return { ok: false, code: "INVALID_QUANTITY" };
+    }
+    if (found) found.quantity += amount;
     else {
       c.items.push({
         product_id: product.product_id,
         store_id: product.store_id,
         product_name: product.product_name,
         unit_price: product.price,
-        quantity: qty,
+        quantity: amount,
       });
     }
     this.save(c);
@@ -46,10 +58,11 @@ export const cart = {
     const c = this.get();
     const item = c.items.find((i) => i.product_id === productId);
     if (!item) return c;
-    if (quantity <= 0) {
+    const next = Math.min(99, Math.max(0, Number.parseInt(quantity, 10) || 0));
+    if (next <= 0) {
       c.items = c.items.filter((i) => i.product_id !== productId);
     } else {
-      item.quantity = quantity;
+      item.quantity = next;
     }
     if (!c.items.length) c.store_id = "";
     this.save(c);

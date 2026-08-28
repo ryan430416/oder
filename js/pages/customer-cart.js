@@ -8,7 +8,7 @@ import { mountBell } from "../notify-ui.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 
 initI18n();
-auth.ensureCustomer();
+if (!(await auth.ensureCustomer())) throw new Error("backend_unavailable");
 
 const hint = qs("#storeHint");
 const lines = qs("#lines");

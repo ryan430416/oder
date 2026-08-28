@@ -7,6 +7,7 @@
 .admin-nav a {
   text-decoration: none;
   font-weight: 700;
+  border-left: 3px solid var(--brand);
 }
 
 .stat-grid {
@@ -20,4 +21,14 @@
   display: block;
   font-size: 1.4rem;
   margin-top: 4px;
+}
+
+@media (min-width: 900px) {
+  .admin-nav {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }

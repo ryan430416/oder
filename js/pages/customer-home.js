@@ -6,9 +6,13 @@ import { initI18n, t, storeLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
 import { escapeHtml } from "../html.js";
 import { servicePeriodsLabel } from "../service-periods.js";
+import { formatTime, pickupSlotsForStore } from "../format.js";
+import { mountIcons } from "../icons.js";
 
 initI18n();
-const session = auth.ensureCustomer();
+mountIcons();
+const session = await auth.ensureCustomer();
+if (!session) throw new Error("backend_unavailable");
 qs("#who").textContent = t("who", { name: session.name });
 qs("#custName").value = session.name === "學生小明" ? "" : session.name;
 qs("#custGrade").value = session.grade || "";
@@ -17,17 +21,17 @@ qs("#cartCount").hidden = cart.count() === 0;
 mountBell(qs("#bellHost"), "notifications.html");
 
 qs("#saveName").addEventListener("click", async () => {
-  const res = auth.setCustomerProfile(qs("#custName").value, qs("#custGrade").value);
+  const res = await auth.setCustomerProfile(qs("#custName").value, qs("#custGrade").value);
   if (!res.ok) {
     qs("#nameMsg").textContent = t(res.code);
     return;
   }
-  const saved = await api.updateCustomerProfile(res.session.name, res.session.grade);
-  qs("#nameMsg").textContent = saved.ok ? t("profile_saved") : t(saved.code || "backend_error");
-  if (saved.ok) qs("#who").textContent = t("who", { name: res.session.name });
+  qs("#nameMsg").textContent = t("profile_saved");
+  qs("#who").textContent = t("who", { name: res.session.name });
 });
 
 const listEl = qs("#list");
+listEl.innerHTML = '<div class="card skeleton"></div><div class="card skeleton"></div>';
 let stores = [];
 
 function isOpen(s) {
@@ -50,6 +54,7 @@ function render(filter = "") {
     .map((s) => {
       const lab = storeLabel(s);
       const open = isOpen(s);
+      const nextSlot = pickupSlotsForStore(s)[0];
       const tag = open ? "a" : "article";
       const link = open
         ? ` href="store.html?store_id=${encodeURIComponent(s.store_id)}"`
@@ -61,6 +66,7 @@ function render(filter = "") {
         <strong>${escapeHtml(lab.name)}</strong>
         <div class="muted">${escapeHtml(lab.desc)}</div>
         <div class="muted">${escapeHtml(servicePeriodsLabel(s.service_periods))}</div>
+        ${nextSlot ? `<div class="muted">${escapeHtml(t("next_pickup", { time: formatTime(nextSlot.value) }))}</div>` : ""}
       </div>
       <span class="badge ${open ? "" : "off"}">${escapeHtml(open ? t("open") : t("closed"))}</span>
     </${tag}>`;

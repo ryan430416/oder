@@ -3,6 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:e2e": "playwright test",
+    "test:all": "npm test && npm run test:e2e",
+    "seed:test-admin": "node scripts/seed-test-admin.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
   }
 }

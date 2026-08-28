@@ -7,7 +7,8 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px var(--pad);
-  background: var(--surface);
+  background: rgb(255 255 255 / 96%);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--line);
 }
 
@@ -67,6 +68,7 @@
   background: var(--surface);
   border-top: 1px solid var(--line);
   padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+  z-index: 30;
 }
 
 .bottom-nav a {
@@ -91,6 +93,22 @@
   padding: 24px;
   max-width: 480px;
   margin: 0 auto;
+}
+
+@media (max-width: 420px) {
+  .topbar {
+    align-items: flex-start;
+    padding: 10px 12px;
+  }
+
+  .topbar-actions {
+    max-width: 62%;
+    gap: 5px;
+  }
+
+  .wrap {
+    padding: 14px 12px 88px;
+  }
 }
 
 .portal h1 {

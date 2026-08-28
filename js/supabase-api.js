@@ -1,334 +1,422 @@
-import { config } from "./config.js";
-import { storage } from "./storage.js";
+import { auth } from "./auth.js";
 import { getSupabase, rpc } from "./supabase.js";
 import { normalizeServicePeriods, servicePeriodBounds } from "./service-periods.js";
 
-function session() {
-  return storage.get(config.SESSION_KEY, null);
-}
-
-function token() {
-  return session()?.token || "";
-}
-
-function isLiveSession(value) {
-  return Boolean(
-    value?.token &&
-      (!value.expires_at || new Date(value.expires_at).getTime() > Date.now())
-  );
-}
-
-function normalizeStore(store) {
-  if (!store) return store;
+function normalizeStore(row) {
+  if (!row) return null;
   return {
-    ...store,
-    open_time: String(store.open_time || "").slice(0, 5),
-    close_time: String(store.close_time || "").slice(0, 5),
-    service_periods: normalizeServicePeriods(store.service_periods),
+    ...row,
+    store_id: row.id,
+    store_name: row.name,
+    image: row.image_url || "",
+    open_time: String(row.open_time || "").slice(0, 5),
+    close_time: String(row.close_time || "").slice(0, 5),
+    service_periods: normalizeServicePeriods(row.service_periods),
   };
 }
 
-async function ensureCustomerSession() {
-  const current = session();
-  if (current?.role === "customer" && isLiveSession(current)) return current;
-  let guest = storage.get(config.GUEST_KEY, null);
-  if (isLiveSession(guest)) return guest;
-  if (guest?.token) {
-    guest = { ...guest, token: "", expires_at: "" };
-    storage.set(config.GUEST_KEY, guest);
-  }
-  const result = await rpc("create_guest_session", {
-    p_name: guest?.name || current?.name || "學生小明",
-  });
-  if (!result?.ok) return null;
-  result.session.grade = guest?.grade || current?.grade || "";
-  storage.set(config.GUEST_KEY, result.session);
-  if (!current || current.role === "customer") {
-    storage.set(config.SESSION_KEY, result.session);
-  }
-  return result.session;
+function normalizeProduct(row, runtimeUrl = "") {
+  if (!row) return null;
+  return {
+    ...row,
+    product_id: row.id,
+    product_name: row.name,
+    image: runtimeUrl || row.image_url || "",
+  };
 }
 
-function failure(error) {
+function normalizeOrder(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    order_id: row.id,
+    items: (row.items || []).map((item) => ({
+      ...item,
+      order_item_id: item.id,
+      product_id: item.product_id || "",
+      product_name: item.product_name_snapshot,
+    })),
+  };
+}
+
+function queryFailure(error, fallback = []) {
   if (error) console.error("Supabase query failed", error);
-  return [];
+  return fallback;
 }
 
-async function orderQuery(filters = []) {
-  try {
-    const client = await getSupabase();
-    let query = client
-      .from("orders")
-      .select("*, items:order_items(*)")
-      .order("created_at", { ascending: false });
-    filters.forEach(([column, value]) => {
-      query = query.eq(column, value);
-    });
-    const { data, error } = await query;
-    return error ? failure(error) : data || [];
-  } catch (error) {
-    return failure(error);
-  }
+async function withProductUrls(rows) {
+  const client = await getSupabase();
+  return Promise.all(
+    (rows || []).map(async (row) => {
+      if (!row.image_path) return normalizeProduct(row);
+      const { data } = await client.storage
+        .from("product-images")
+        .createSignedUrl(row.image_path, 3600);
+      return normalizeProduct(row, data?.signedUrl || "");
+    })
+  );
+}
+
+async function orderQuery(column, value) {
+  const client = await getSupabase();
+  let query = client
+    .from("orders")
+    .select("*, items:order_items(*)")
+    .order("created_at", { ascending: false });
+  if (column && value) query = query.eq(column, value);
+  const { data, error } = await query;
+  return error ? queryFailure(error) : (data || []).map(normalizeOrder);
+}
+
+async function accessToken() {
+  const client = await getSupabase();
+  const { data } = await client.auth.getSession();
+  return data.session?.access_token || "";
+}
+
+async function adminRequest(path, body) {
+  const token = await accessToken();
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json().catch(() => ({ ok: false, code: "backend_error" }));
+  return response.ok ? result : { ok: false, code: result.code || "backend_error" };
 }
 
 export const supabaseApi = {
   async getStores() {
-    try {
-      const client = await getSupabase();
-      const { data, error } = await client.from("stores").select("*").order("store_id");
-      return error ? failure(error) : (data || []).map(normalizeStore);
-    } catch (error) {
-      return failure(error);
-    }
+    const client = await getSupabase();
+    const { data, error } = await client.from("stores").select("*").order("created_at");
+    return error ? queryFailure(error) : (data || []).map(normalizeStore);
   },
 
   async getStore(storeId) {
-    try {
-      const client = await getSupabase();
-      const { data, error } = await client
-        .from("stores")
-        .select("*")
-        .eq("store_id", storeId)
-        .maybeSingle();
-      if (error) failure(error);
-      return normalizeStore(data) || null;
-    } catch (error) {
-      failure(error);
-      return null;
-    }
+    const client = await getSupabase();
+    const { data, error } = await client.from("stores").select("*").eq("id", storeId).maybeSingle();
+    return error ? queryFailure(error, null) : normalizeStore(data);
   },
 
   async getProducts(storeId) {
-    try {
-      const client = await getSupabase();
-      const { data, error } = await client
-        .from("products")
-        .select("*")
-        .eq("store_id", storeId)
-        .order("created_at");
-      return error ? failure(error) : data || [];
-    } catch (error) {
-      return failure(error);
-    }
+    const client = await getSupabase();
+    const { data, error } = await client
+      .from("products")
+      .select("*")
+      .eq("store_id", storeId)
+      .order("created_at");
+    return error ? queryFailure(error) : withProductUrls(data);
   },
 
   async updateCustomerProfile(name, grade) {
-    const customer = await ensureCustomerSession();
-    if (!customer) return { ok: false, code: "backend_error" };
-    return rpc("update_customer_profile", {
-      p_token: customer.token,
-      p_name: name,
-      p_grade: grade,
-    });
+    return auth.setCustomerProfile(name, grade);
   },
 
-  async createOrder({ customer_name, customer_grade, store_id, pickup_time, payment_method, items }) {
-    const customer = await ensureCustomerSession();
-    if (!customer) return { ok: false, code: "backend_error" };
-    const profile = await this.updateCustomerProfile(customer_name, customer_grade);
-    if (!profile?.ok) return profile;
+  async createOrder({ customer_name, store_id, pickup_time, payment_method, items, idempotency_key }) {
     return rpc("create_order", {
-      p_token: customer.token,
-      p_customer_name: customer_name,
       p_store_id: store_id,
+      p_customer_name: customer_name,
       p_pickup_time: pickup_time,
       p_payment_method: payment_method,
       p_items: items.map(({ product_id, quantity }) => ({ product_id, quantity })),
+      p_idempotency_key: idempotency_key || crypto.randomUUID(),
     });
   },
 
   async getCustomerOrders() {
-    const customer = await ensureCustomerSession();
-    if (!customer) return [];
-    const data = await rpc("get_customer_orders", { p_token: customer.token });
-    return Array.isArray(data) ? data : [];
+    const current = auth.getSession();
+    return current ? orderQuery("customer_id", current.user_id) : [];
   },
 
-  getStoreOrders() {
-    const storeId = session()?.store_id;
-    return storeId ? orderQuery([["store_id", storeId]]) : Promise.resolve([]);
+  async getStoreOrders() {
+    const storeId = auth.getBoundStoreId();
+    return storeId ? orderQuery("store_id", storeId) : [];
   },
 
   updateOrderStatus(orderId, nextStatus) {
     return rpc("update_order_status", {
-      p_token: token(),
       p_order_id: orderId,
       p_next_status: nextStatus,
     });
   },
 
   cancelOrder(orderId) {
-    const current = session();
-    return rpc("cancel_order", {
-      p_token: current?.token || "",
-      p_order_id: orderId,
-    });
+    return rpc("cancel_order", { p_order_id: orderId });
   },
 
   async getNotifications() {
-    let current = session();
-    if (!current || current.role === "customer") current = await ensureCustomerSession();
-    const data = await rpc("get_notifications", {
-      p_token: current?.token || "",
-    });
-    return Array.isArray(data) ? data : [];
+    const client = await getSupabase();
+    const { data, error } = await client
+      .from("notifications")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+    if (error) return queryFailure(error);
+    return (data || []).map((item) => ({
+      ...item,
+      notification_id: item.id,
+      key: item.type,
+      read: item.is_read,
+      vars: { message: item.message },
+    }));
   },
 
-  markNotificationRead(id) {
-    const current = session();
-    return rpc("mark_notification_read", {
-      p_token: current?.token || "",
-      p_notification_id: id,
-    });
+  async markNotificationRead(id) {
+    return rpc("mark_notification_read", { p_notification_id: id });
   },
 
-  requestPasswordReset(username) {
-    return rpc("request_password_reset", { p_username: username });
+  async requestPasswordReset(username) {
+    try {
+      const response = await fetch("/api/request-password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username }),
+      });
+      return response.ok ? { ok: true } : { ok: false, code: "backend_error" };
+    } catch {
+      return { ok: false, code: "backend_error" };
+    }
   },
 
-  resetStorePassword(storeId, newPassword) {
-    return rpc("reset_store_password", {
-      p_token: token(),
+  async resetStorePassword(storeId, newPassword) {
+    const result = await rpc("reset_store_password", {
       p_store_id: storeId,
-      p_new_password: newPassword,
+      p_password: newPassword,
+    });
+    if (result?.ok) return result;
+    return adminRequest("/api/admin/reset-store-password", {
+      store_id: storeId,
+      password: newPassword,
     });
   },
 
   async getPasswordResets() {
-    const data = await rpc("get_password_resets", { p_token: token() });
-    return Array.isArray(data) ? data : [];
+    return [];
   },
 
   getAdminOrders() {
-    return session()?.role === "admin" ? orderQuery() : Promise.resolve([]);
+    return orderQuery();
+  },
+
+  async createStoreAccount(storeId, username, password, displayName) {
+    const account = await rpc("create_store_account", {
+      p_store_id: storeId,
+      p_username: username,
+      p_password: password,
+      p_display_name: displayName,
+    });
+    if (account?.ok || (account?.code && account.code !== "backend_error")) return account;
+    return adminRequest("/api/admin/create-store-user", {
+      store_id: storeId,
+      username,
+      password,
+      display_name: displayName,
+    });
   },
 
   async createStore(payload) {
+    const client = await getSupabase();
     const periods = normalizeServicePeriods(payload.service_periods);
     if (!periods.length) return { ok: false, code: "need_service_period" };
     const bounds = servicePeriodBounds(periods);
-    const created = await rpc("create_store", {
-      p_token: token(),
-      p_store_name: payload.store_name,
-      p_description: payload.description || "",
-      p_open_time: bounds.open_time,
-      p_close_time: bounds.close_time,
-      p_image: payload.image || "🏪",
-      p_username: payload.username,
-      p_password: payload.password,
-    });
-    if (!created?.ok) return created;
-    const saved = await rpc("set_store_service_periods", {
-      p_token: token(),
-      p_store_id: created.store.store_id,
-      p_periods: periods,
-    });
-    return saved?.ok ? { ...created, store: saved.store } : saved;
+    const storeId = crypto.randomUUID();
+    const { data, error } = await client
+      .from("stores")
+      .insert({
+        id: storeId,
+        name: String(payload.store_name || "").trim(),
+        description: String(payload.description || "").trim(),
+        image_url: payload.image && /^https:\/\//.test(payload.image) ? payload.image : null,
+        open_time: bounds.open_time,
+        close_time: bounds.close_time,
+        service_periods: periods,
+        status: "open",
+      })
+      .select()
+      .single();
+    if (error) return { ok: false, code: "backend_error", message: error.message };
+    const account = await this.createStoreAccount(storeId, payload.username, payload.password, data.name);
+    if (!account.ok) {
+      await client.from("stores").delete().eq("id", storeId);
+      return account;
+    }
+    return { ok: true, store: normalizeStore(data), username: payload.username };
   },
 
   async updateStore(storeId, patch) {
-    const current = await this.getStore(storeId);
-    if (!current) return { ok: false, code: "no_store" };
-    const updated = await rpc("update_store", {
-      p_token: token(),
-      p_store_id: storeId,
-      p_store_name: patch.store_name ?? current.store_name,
-      p_description: patch.description ?? current.description,
-      p_open_time: patch.open_time ?? current.open_time,
-      p_close_time: patch.close_time ?? current.close_time,
-      p_status: patch.status ?? current.status,
-      p_image: patch.image ?? current.image,
-    });
-    if (!updated?.ok || patch.service_periods == null) return updated;
-    const periods = normalizeServicePeriods(patch.service_periods);
-    if (!periods.length) return { ok: false, code: "need_service_period" };
-    return rpc("set_store_service_periods", {
-      p_token: token(),
-      p_store_id: storeId,
-      p_periods: periods,
-    });
+    const periods =
+      patch.service_periods == null ? null : normalizeServicePeriods(patch.service_periods);
+    if (periods && !periods.length) return { ok: false, code: "need_service_period" };
+    const values = {};
+    if (patch.store_name != null) values.name = String(patch.store_name).trim();
+    if (patch.description != null) values.description = String(patch.description).trim();
+    if (patch.status != null) values.status = patch.status;
+    if (patch.image && /^https:\/\//.test(patch.image)) values.image_url = patch.image;
+    if (periods) {
+      const bounds = servicePeriodBounds(periods);
+      Object.assign(values, bounds, { service_periods: periods });
+    }
+    const client = await getSupabase();
+    const { data, error } = await client
+      .from("stores")
+      .update(values)
+      .eq("id", storeId)
+      .select()
+      .single();
+    if (error) return { ok: false, code: "backend_error", message: error.message };
+    if (patch.status === "disabled" || patch.status === "open") {
+      await client
+        .from("profiles")
+        .update({ status: patch.status === "disabled" ? "disabled" : "active" })
+        .eq("store_id", storeId)
+        .eq("role", "store");
+    }
+    return { ok: true, store: normalizeStore(data) };
   },
 
-  deleteStore(storeId) {
-    return rpc("delete_store", { p_token: token(), p_store_id: storeId });
+  async deleteStore(storeId) {
+    const client = await getSupabase();
+    const { count } = await client
+      .from("orders")
+      .select("id", { count: "exact", head: true })
+      .eq("store_id", storeId);
+    if (count) return this.updateStore(storeId, { status: "disabled" });
+    const { error } = await client.from("stores").delete().eq("id", storeId);
+    return error ? { ok: false, code: "backend_error" } : { ok: true };
   },
 
-  createProduct(payload) {
-    return rpc("mutate_product", {
-      p_token: token(),
-      p_action: "create",
-      p_product_id: null,
-      p_store_id: payload.store_id || session()?.store_id || "",
-      p_product_name: payload.product_name,
-      p_category: payload.category || "",
-      p_description: payload.description || "",
-      p_price: Number(payload.price),
-      p_image: payload.image || "🍽️",
-      p_status: payload.status || "active",
-    });
+  async getStoreImpact(storeId) {
+    const client = await getSupabase();
+    const [products, orders, users] = await Promise.all([
+      client.from("products").select("id", { count: "exact", head: true }).eq("store_id", storeId),
+      client.from("orders").select("id", { count: "exact", head: true }).eq("store_id", storeId),
+      client.from("profiles").select("id", { count: "exact", head: true }).eq("store_id", storeId),
+    ]);
+    return {
+      products: products.count || 0,
+      orders: orders.count || 0,
+      users: users.count || 0,
+    };
+  },
+
+  async createProduct(payload) {
+    const client = await getSupabase();
+    const id = payload.product_id || crypto.randomUUID();
+    const { data, error } = await client
+      .from("products")
+      .insert({
+        id,
+        store_id: payload.store_id || auth.getBoundStoreId(),
+        name: String(payload.product_name || "").trim(),
+        category: String(payload.category || "").trim(),
+        description: String(payload.description || "").trim(),
+        price: Number(payload.price),
+        image_path: payload.image_path || null,
+        status: payload.status || "active",
+      })
+      .select()
+      .single();
+    return error
+      ? { ok: false, code: "backend_error", message: error.message }
+      : { ok: true, product: normalizeProduct(data) };
   },
 
   async updateProduct(productId, patch) {
-    const current = (await this.getProducts(patch.store_id || session()?.store_id || "")).find(
-      (product) => product.product_id === productId
-    );
-    if (!current) {
-      try {
-        const client = await getSupabase();
-        const { data } = await client.from("products").select("*").eq("product_id", productId).maybeSingle();
-        if (!data) return { ok: false, code: "no_product" };
-        return this.updateProduct(productId, { ...data, ...patch, store_id: data.store_id });
-      } catch {
-        return { ok: false, code: "no_product" };
-      }
-    }
-    return rpc("mutate_product", {
-      p_token: token(),
-      p_action: "update",
-      p_product_id: productId,
-      p_store_id: current.store_id,
-      p_product_name: patch.product_name ?? current.product_name,
-      p_category: patch.category ?? current.category,
-      p_description: patch.description ?? current.description,
-      p_price: Number(patch.price ?? current.price),
-      p_image: patch.image ?? current.image,
-      p_status: patch.status ?? current.status,
-    });
+    const values = {};
+    if (patch.product_name != null) values.name = String(patch.product_name).trim();
+    if (patch.category != null) values.category = String(patch.category).trim();
+    if (patch.description != null) values.description = String(patch.description).trim();
+    if (patch.price != null) values.price = Number(patch.price);
+    if (patch.image_path !== undefined) values.image_path = patch.image_path || null;
+    if (patch.status != null) values.status = patch.status;
+    const client = await getSupabase();
+    const { data, error } = await client
+      .from("products")
+      .update(values)
+      .eq("id", productId)
+      .select()
+      .single();
+    return error
+      ? { ok: false, code: "backend_error", message: error.message }
+      : { ok: true, product: normalizeProduct(data) };
   },
 
   deleteProduct(productId) {
-    return rpc("mutate_product", {
-      p_token: token(),
-      p_action: "delete",
-      p_product_id: productId,
-      p_store_id: null,
-      p_product_name: null,
-      p_category: null,
-      p_description: null,
-      p_price: null,
-      p_image: null,
-      p_status: null,
-    });
+    return rpc("delete_or_hide_product", { p_product_id: productId });
   },
 
   async getAdminUsers() {
-    const data = await rpc("get_admin_users", { p_token: token() });
-    return Array.isArray(data) ? data : [];
+    const client = await getSupabase();
+    const { data, error } = await client.from("profiles").select("*").order("created_at");
+    if (error) return queryFailure(error);
+    return (data || []).map((row) => ({
+      ...row,
+      user_id: row.id,
+      name: row.display_name,
+    }));
   },
 
   deleteUserAccount(userId) {
-    return rpc("delete_user_account", {
-      p_token: token(),
-      p_user_id: userId,
-    });
+    return adminRequest("/api/admin/disable-user", { user_id: userId });
+  },
+
+  async setUserStatus(userId, status) {
+    const client = await getSupabase();
+    const { error } = await client
+      .from("profiles")
+      .update({ status })
+      .eq("id", userId);
+    return error ? { ok: false, code: "backend_error" } : { ok: true };
   },
 
   async getAdminReviews() {
-    const data = await rpc("get_admin_reviews", { p_token: token() });
-    return Array.isArray(data) ? data : [];
+    const client = await getSupabase();
+    const { data, error } = await client.from("reviews").select("*").order("created_at", {
+      ascending: false,
+    });
+    return error ? queryFailure(error) : data || [];
   },
 
-  getAdminStats() {
-    return rpc("get_admin_stats", { p_token: token() });
+  async getAdminStats() {
+    const client = await getSupabase();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [stores, products, orders] = await Promise.all([
+      client.from("stores").select("id", { count: "exact", head: true }),
+      client.from("products").select("id", { count: "exact", head: true }),
+      client.from("orders").select("total, store_id, items:order_items(product_name_snapshot, quantity)").gte(
+        "created_at",
+        today.toISOString()
+      ),
+    ]);
+    if (stores.error || products.error || orders.error) return null;
+    const rows = orders.data || [];
+    const revenue = rows.reduce((sum, order) => sum + Number(order.total), 0);
+    const storeCounts = new Map();
+    rows.forEach((order) => {
+      storeCounts.set(order.store_id, (storeCounts.get(order.store_id) || 0) + 1);
+    });
+    const productCounts = new Map();
+    rows.flatMap((order) => order.items || []).forEach((item) => {
+      productCounts.set(
+        item.product_name_snapshot,
+        (productCounts.get(item.product_name_snapshot) || 0) + Number(item.quantity)
+      );
+    });
+    const topProduct = [...productCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+    const topStoreId = [...storeCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+    return {
+      stores: stores.count || 0,
+      products: products.count || 0,
+      orders: rows.length,
+      today: rows.length,
+      revenue,
+      topProduct,
+      topStoreId,
+      peakHour: null,
+    };
   },
 };

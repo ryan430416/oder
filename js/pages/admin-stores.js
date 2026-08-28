@@ -7,7 +7,7 @@ import { escapeAttr, escapeHtml } from "../html.js";
 import { mountPasswordToggles } from "../password-toggle.js";
 import { servicePeriodsLabel } from "../service-periods.js";
 
-if (!bootAdmin()) throw new Error("admin");
+if (!(await bootAdmin())) throw new Error("admin");
 mountPasswordToggles();
 
 const form = qs("#form");
@@ -92,6 +92,19 @@ form.addEventListener("submit", async (e) => {
   let res;
   if (data.store_id) {
     res = await api.updateStore(data.store_id, data);
+    if (res.ok && data.username && data.password) {
+      const account = await api.createStoreAccount(
+        data.store_id,
+        data.username,
+        data.password,
+        data.store_name
+      );
+      if (!account.ok) {
+        msg.textContent = t(account.code);
+        return;
+      }
+      res = { ...res, username: data.username, store: res.store || { store_name: data.store_name, store_id: data.store_id } };
+    }
   } else {
     if (!data.username || !data.password) {
       msg.textContent = t("bad_login");
@@ -103,7 +116,9 @@ form.addEventListener("submit", async (e) => {
     msg.textContent = t(res.code);
     return;
   }
-  if (res.username) {
+  if (res.username && data.store_id) {
+    msg.textContent = t("attach_store_login", { user: res.username });
+  } else if (res.username) {
     msg.textContent = t("store_created_msg", {
       name: res.store.store_name,
       id: res.store.store_id,
@@ -143,10 +158,12 @@ list.addEventListener("click", async (e) => {
     form.description.value = s.description || "";
     setPeriods(s.service_periods);
     iconPick._set(s.image);
-    loginFields.hidden = true;
+    loginFields.hidden = false;
     qs("#resetBox").hidden = false;
-    form.username.disabled = true;
-    form.password.disabled = true;
+    form.username.disabled = false;
+    form.password.disabled = false;
+    form.username.value = "";
+    form.password.value = "";
     submitBtn.textContent = t("form_save_store");
     cancelBtn.hidden = false;
     form.store_name.focus();
@@ -160,7 +177,17 @@ list.addEventListener("click", async (e) => {
   if (del) {
     const s = stores.find((x) => x.store_id === del.dataset.del);
     if (!s) return;
-    if (!confirm(t("confirm_delete_store", { name: storeLabel(s).name }))) return;
+    const impact = await api.getStoreImpact(s.store_id);
+    if (
+      !confirm(
+        t("confirm_delete_store_impact", {
+          name: storeLabel(s).name,
+          products: impact.products,
+          orders: impact.orders,
+          users: impact.users,
+        })
+      )
+    ) return;
     const res = await api.deleteStore(s.store_id);
     msg.textContent = res.ok ? t("deleted_ok") : t(res.code);
     if (res.ok && form.store_id.value === s.store_id) setCreateMode();

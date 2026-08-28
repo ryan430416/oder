@@ -3,6 +3,11 @@
   font-size: 1rem;
 }
 
+.order-card[data-status="pending"] {
+  border-left: 4px solid var(--accent);
+  background: #fffdf2;
+}
+
 .order-meta {
   display: flex;
   justify-content: space-between;

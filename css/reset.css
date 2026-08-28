@@ -1,20 +1,19 @@
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Myanmar:wght@400;600;700&family=Noto+Sans+TC:wght@400;600;700&family=Noto+Sans+Thai:wght@400;600;700&display=swap");
-
 :root {
-  --bg: #f4f1ea;
-  --surface: #fffdf8;
-  --ink: #1c1917;
-  --muted: #78716c;
-  --line: #e7e0d6;
-  --brand: #0f766e;
-  --brand-dark: #115e59;
-  --accent: #c2410c;
-  --ok: #15803d;
-  --warn: #b45309;
-  --danger: #b91c1c;
-  --ready: #0369a1;
-  --radius: 14px;
-  --shadow: 0 8px 24px rgba(28, 25, 23, 0.08);
+  --bg: #f4f7f5;
+  --surface: #ffffff;
+  --ink: #17251f;
+  --muted: #617068;
+  --line: #d8e2dc;
+  --brand: #176b45;
+  --brand-dark: #0d4d31;
+  --accent: #d7a800;
+  --accent-ink: #3b2e00;
+  --ok: #147a46;
+  --warn: #9a6700;
+  --danger: #b4232c;
+  --ready: #176b64;
+  --radius: 8px;
+  --shadow: 0 2px 8px rgba(13, 77, 49, 0.06);
   --max: 720px;
   --pad: 16px;
 }
@@ -30,7 +29,7 @@ body {
 }
 
 body {
-  font-family: "Noto Sans TC", "Noto Sans Thai", "Noto Sans Myanmar", "Segoe UI", "Microsoft JhengHei", sans-serif;
+  font-family: "Segoe UI", "Noto Sans TC", "Noto Sans Thai", "Noto Sans Myanmar", "Microsoft JhengHei", sans-serif;
   background: var(--bg);
   color: var(--ink);
   line-height: 1.45;

@@ -5,7 +5,7 @@ import { bootAdmin } from "../admin-boot.js";
 import { formatTime } from "../format.js";
 import { escapeHtml } from "../html.js";
 
-if (!bootAdmin()) throw new Error("admin");
+if (!(await bootAdmin())) throw new Error("admin");
 
 const reviews = await api.getAdminReviews();
 const list = qs("#list");

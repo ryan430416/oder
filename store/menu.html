@@ -24,22 +24,26 @@
     <form class="card login-form easy-form" id="form">
       <input type="hidden" name="product_id" />
       <label for="storeProductName" data-i18n="form_product_name"></label>
-      <input id="storeProductName" name="product_name" required />
+      <input id="storeProductName" name="product_name" maxlength="100" required />
       <label for="storeProductCategory" data-i18n="form_category"></label>
-      <input id="storeProductCategory" name="category" />
+      <input id="storeProductCategory" name="category" maxlength="40" required />
       <label for="storeProductDescription" data-i18n="form_desc"></label>
-      <textarea id="storeProductDescription" name="description" rows="2"></textarea>
+      <textarea id="storeProductDescription" name="description" maxlength="500" rows="2"></textarea>
       <label for="storeProductPrice" data-i18n="form_price"></label>
       <input id="storeProductPrice" name="price" type="number" min="0" step="1" inputmode="numeric" required />
-      <label data-i18n="form_image"></label>
-      <div id="iconPick"></div>
       <label for="storeProductPhoto" data-i18n="form_photo"></label>
-      <input id="storeProductPhoto" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
-      <div id="photoPreview" class="image-preview"></div>
+      <input id="storeProductPhoto" type="file" accept="image/jpeg,image/png,image/webp" />
+      <div id="photoPreview" class="image-preview" tabindex="0"></div>
+      <progress id="uploadProgress" max="100" value="0" hidden></progress>
+      <div class="row-actions">
+        <button class="btn btn-ghost" type="button" id="removePhoto" hidden data-i18n="remove_photo"></button>
+        <button class="btn btn-ghost" type="button" id="retryUpload" hidden data-i18n="retry"></button>
+      </div>
       <label for="storeProductStatus" data-i18n="form_status"></label>
       <select id="storeProductStatus" name="status">
         <option value="active" data-i18n="listed"></option>
         <option value="soldout" data-i18n="soldout"></option>
+        <option value="hidden" data-i18n="hidden"></option>
       </select>
       <p class="muted" id="msg"></p>
       <button class="btn btn-block" type="submit" style="margin-top:12px" id="submitBtn" data-i18n="form_add_product"></button>

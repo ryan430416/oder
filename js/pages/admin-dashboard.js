@@ -4,7 +4,7 @@ import { t } from "../i18n.js";
 import { bootAdmin } from "../admin-boot.js";
 import { mountBell } from "../notify-ui.js";
 
-if (!bootAdmin()) throw new Error("admin");
+if (!(await bootAdmin())) throw new Error("admin");
 mountBell(qs("#bellHost"), "notifications.html");
 
 const stats = await api.getAdminStats();

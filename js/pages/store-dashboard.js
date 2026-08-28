@@ -1,20 +1,22 @@
 import { auth } from "../auth.js";
 import { api } from "../api.js";
 import { money, formatTime, dateKey, formatDate } from "../format.js";
-import { qs } from "../nav.js";
+import { qs, goToPage } from "../nav.js";
 import { initI18n, t, statusLabel, productLabel, gradeLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
 import { ORDER_FILTERS, watchOrders } from "../order-filters.js";
 import { escapeAttr, escapeHtml } from "../html.js";
+import { canTransition } from "../order-status.js";
 
 initI18n();
-const session = auth.requireRole("store", "index.html");
+const session = await auth.requireRole("store", "index.html");
+if (!session) throw new Error("store");
 
 qs("#title").textContent = session.name;
 qs("#bound").textContent = t("bound", { id: auth.getBoundStoreId() });
-qs("#logout").addEventListener("click", () => {
-  auth.logout();
-  location.href = "index.html";
+qs("#logout").addEventListener("click", async () => {
+  await auth.logout();
+  goToPage("index.html");
 });
 mountBell(qs("#bellHost"), "notifications.html");
 
@@ -23,8 +25,14 @@ let group = "all";
 function actions(status) {
   let html = "";
   if (status === "pending") {
-    html += `<button class="btn" data-next="ready">${t("mark_ready")}</button>
+    html += `<button class="btn" data-next="accepted">${t("accept")}</button>
             <button class="btn btn-danger" data-next="rejected">${t("reject")}</button>`;
+  }
+  if (status === "accepted") {
+    html += `<button class="btn" data-next="preparing">${t("start_cook")}</button>`;
+  }
+  if (status === "preparing") {
+    html += `<button class="btn" data-next="ready">${t("mark_ready")}</button>`;
   }
   if (status === "ready") {
     html += `<button class="btn" data-next="completed">${t("complete")}</button>`;
@@ -38,6 +46,9 @@ function actions(status) {
 const tabs = qs("#tabs");
 const list = qs("#list");
 const day = qs("#day");
+const realtimeStatus = document.createElement("p");
+realtimeStatus.className = "muted realtime-status";
+tabs.before(realtimeStatus);
 
 function drawTabs() {
   tabs.innerHTML = ORDER_FILTERS.map(
@@ -63,9 +74,9 @@ async function render() {
       last = dk;
     }
     html += `
-    <article class="card order-card" data-oid="${escapeAttr(o.order_id)}">
+    <article class="card order-card" data-oid="${escapeAttr(o.order_id)}" data-status="${escapeAttr(o.status)}">
       <div class="order-meta">
-        <strong>${escapeHtml(o.order_id)}</strong>
+        <strong>${escapeHtml(o.order_number || o.order_id)}</strong>
         <span class="status ${escapeAttr(o.status)}">${escapeHtml(statusLabel(o.status))}</span>
       </div>
       <div class="muted">${escapeHtml(t("cust_label", { name: o.customer_name || "—" }))}</div>
@@ -101,12 +112,22 @@ list.addEventListener("click", async (e) => {
     return;
   }
   if (!btn) return;
+  const currentStatus = card
+    .querySelector(".status")
+    ?.className.match(/\b(pending|accepted|preparing|ready|completed|rejected|cancelled)\b/)?.[1];
+  if (!canTransition(currentStatus, btn.dataset.next)) return;
+  btn.disabled = true;
   const res = await api.updateOrderStatus(card.dataset.oid, btn.dataset.next);
-  if (!res.ok) alert(res.message || t("order_fail"));
+  if (!res.ok) {
+    btn.disabled = false;
+    alert(res.message || t("order_fail"));
+  }
   render();
 });
 
 drawTabs();
 render();
-watchOrders(render);
+watchOrders(render, (status) => {
+  realtimeStatus.textContent = t(`realtime_${status}`);
+});
 setInterval(render, 5000);

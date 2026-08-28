@@ -5,7 +5,7 @@ import { t, statusLabel, productLabel, storeLabel, gradeLabel } from "../i18n.js
 import { bootAdmin } from "../admin-boot.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 
-if (!bootAdmin()) throw new Error("admin");
+if (!(await bootAdmin())) throw new Error("admin");
 
 const stores = await api.getStores();
 const list = qs("#list");
@@ -35,7 +35,7 @@ async function render() {
     html += `
     <article class="card order-card" data-oid="${escapeAttr(o.order_id)}">
       <div class="order-meta">
-        <strong>${escapeHtml(o.order_id)}</strong>
+        <strong>${escapeHtml(o.order_number || o.order_id)}</strong>
         <span class="status ${escapeAttr(o.status)}">${escapeHtml(statusLabel(o.status))}</span>
       </div>
       <div class="muted">${escapeHtml(sname(o.store_id))}</div>

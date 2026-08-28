@@ -5,7 +5,7 @@ import { bootAdmin } from "../admin-boot.js";
 import { formatTime } from "../format.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 
-if (!bootAdmin()) throw new Error("admin");
+if (!(await bootAdmin())) throw new Error("admin");
 
 const list = qs("#list");
 const msg = qs("#msg");
@@ -31,10 +31,11 @@ async function render() {
         u.role === "admin"
           ? ""
           : `<div class="row-actions">
-              <button class="btn btn-danger" type="button"
-                data-delete-user="${escapeAttr(u.user_id)}"
+              <button class="btn ${u.status === "active" ? "btn-danger" : ""}" type="button"
+                data-user-status="${escapeAttr(u.user_id)}"
+                data-next-status="${u.status === "active" ? "disabled" : "active"}"
                 data-user-name="${escapeAttr(u.name)}"
-                data-user-role="${escapeAttr(role)}">${t("delete_account")}</button>
+                data-user-role="${escapeAttr(role)}">${t(u.status === "active" ? "disable_account" : "enable_account")}</button>
             </div>`
       }
     </article>`;
@@ -43,11 +44,11 @@ async function render() {
 }
 
 list.addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-delete-user]");
+  const button = event.target.closest("[data-user-status]");
   if (!button) return;
   if (
     !confirm(
-      t("confirm_delete_user", {
+      t("confirm_user_status", {
         name: button.dataset.userName,
         role: button.dataset.userRole,
       })
@@ -56,8 +57,8 @@ list.addEventListener("click", async (event) => {
     return;
   }
   button.disabled = true;
-  const result = await api.deleteUserAccount(button.dataset.deleteUser);
-  msg.textContent = result.ok ? t("account_deleted") : t(result.code || "backend_error");
+  const result = await api.setUserStatus(button.dataset.userStatus, button.dataset.nextStatus);
+  msg.textContent = result.ok ? t("saved_ok") : t(result.code || "backend_error");
   if (result.ok) await render();
   else button.disabled = false;
 });

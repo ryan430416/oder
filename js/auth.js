@@ -1,155 +1,161 @@
-/**
- * 身分與權限
- * 店家 store_id 一律從登入使用者讀取，不接受前端自行指定
- */
-import { config } from "./config.js";
-import { storage } from "./storage.js";
-import { getDb, saveDb } from "./mock/db.js";
-import { rpc } from "./supabase.js";
+import { getSupabase, rpc } from "./supabase.js";
+import { pageHref } from "./nav.js";
 
+const PROFILE_KEY = "campus_order_profile";
 const CUSTOMER_GRADES = new Set(["high_1", "high_2", "high_3"]);
+let profileCache;
 
-function getGuest() {
-  let guest = storage.get(config.GUEST_KEY, null);
-  if (guest?.expires_at && new Date(guest.expires_at).getTime() <= Date.now()) {
-    storage.remove(config.GUEST_KEY);
-    guest = null;
+function readProfile() {
+  if (profileCache !== undefined) return profileCache;
+  try {
+    profileCache = JSON.parse(sessionStorage.getItem(PROFILE_KEY)) || null;
+  } catch {
+    profileCache = null;
   }
-  if (!guest) {
-    const id =
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : Date.now().toString(36) + Math.random().toString(36).slice(2);
-    guest = { user_id: `guest_${id}`, name: "學生小明", grade: "", role: "customer", store_id: "" };
-  }
-  if (guest.grade == null) guest.grade = "";
-  storage.set(config.GUEST_KEY, guest);
-  return guest;
+  return profileCache;
+}
+
+function writeProfile(profile) {
+  profileCache = profile || null;
+  if (profile) sessionStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
+  else sessionStorage.removeItem(PROFILE_KEY);
+  return profileCache;
+}
+
+function loginEmail(username) {
+  const value = String(username || "").trim().toLowerCase();
+  return value.includes("@") ? value : `${value}@campus-order.test`;
+}
+
+async function loadProfile(userId) {
+  const client = await getSupabase();
+  const { data, error } = await client
+    .from("profiles")
+    .select("id, display_name, grade, role, store_id, status")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error || !data || data.status !== "active") return null;
+  return writeProfile({
+    user_id: data.id,
+    name: data.display_name || "",
+    grade: data.grade || "",
+    role: data.role,
+    store_id: data.store_id || "",
+  });
 }
 
 export const auth = {
   getSession() {
-    const value = storage.get(config.SESSION_KEY, null);
-    if (value?.expires_at && new Date(value.expires_at).getTime() <= Date.now()) {
-      storage.remove(config.SESSION_KEY);
-      if (value.role === "customer") storage.remove(config.GUEST_KEY);
+    return readProfile();
+  },
+
+  async restoreSession() {
+    const client = await getSupabase();
+    const { data } = await client.auth.getSession();
+    if (!data.session?.user) {
+      writeProfile(null);
       return null;
     }
-    return value;
+    return loadProfile(data.session.user.id);
   },
 
-  requireRole(role, loginHref) {
-    const s = this.getSession();
-    if (!s || s.role !== role) {
-      window.location.href = loginHref;
-      throw new Error("需要登入");
+  async requireRole(role, loginHref) {
+    const current = await this.restoreSession();
+    if (!current || current.role !== role) {
+      writeProfile(null);
+      const target = new URL(pageHref(loginHref));
+      target.searchParams.set("reason", "session_expired");
+      location.replace(target.href);
+      return null;
     }
-    return s;
+    return current;
   },
 
-  /**
-   * 店家綁定的真正 store_id（唯一權限來源）
-   */
   getBoundStoreId() {
-    const s = this.getSession();
-    if (!s || s.role !== "store") return "";
-    if (s.store_id) return s.store_id;
-    if (!config.USE_MOCK) return "";
-    const user = getDb().Users.find((u) => u.user_id === s.user_id);
-    return (user && user.store_id) || "";
+    const current = readProfile();
+    return current?.role === "store" ? current.store_id || "" : "";
   },
 
   async login(username, password) {
-    if (!config.USE_MOCK) {
-      const result = await rpc("demo_login", {
-        p_username: String(username || "").trim(),
-        p_password: String(password || ""),
+    try {
+      const client = await getSupabase();
+      const { data, error } = await client.auth.signInWithPassword({
+        email: loginEmail(username),
+        password: String(password || ""),
       });
-      if (result?.ok) storage.set(config.SESSION_KEY, result.session);
-      return result;
+      if (error || !data.user) return { ok: false, code: "bad_login" };
+      const profile = await loadProfile(data.user.id);
+      if (!profile) {
+        await client.auth.signOut();
+        return { ok: false, code: "disabled" };
+      }
+      return { ok: true, session: profile };
+    } catch (error) {
+      console.error("Supabase login failed", error);
+      return { ok: false, code: "backend_error" };
     }
-    const db = getDb();
-    const acc = db.Accounts.find(
-      (a) => a.username === username.trim() && a.password === password
-    );
-    if (!acc) return { ok: false, code: "bad_login" };
-    const user = db.Users.find((u) => u.user_id === acc.user_id);
-    if (!user || user.status !== "active") {
-      return { ok: false, code: "disabled" };
-    }
-    const session = {
-      user_id: user.user_id,
-      name: user.name,
-      grade: user.grade || "",
-      role: user.role,
-      store_id: user.store_id || "",
-    };
-    storage.set(config.SESSION_KEY, session);
-    return { ok: true, session };
   },
 
-  logout() {
-    const token = this.getSession()?.token;
-    storage.remove(config.SESSION_KEY);
-    if (!config.USE_MOCK && token) rpc("demo_logout", { p_token: token });
+  async logout() {
+    writeProfile(null);
+    try {
+      const client = await getSupabase();
+      await client.auth.signOut();
+    } catch {
+      // Local profile is already cleared.
+    }
   },
 
-  /** 顧客端：沒登入才用示範學生。管理員／店家進顧客頁時不覆蓋原登入 */
-  ensureCustomer() {
-    const s = this.getSession();
-    if (s && s.role === "customer") return s;
-    if (!config.USE_MOCK) {
-      const guest = getGuest();
-      if (s && (s.role === "admin" || s.role === "store")) return guest;
-      storage.set(config.SESSION_KEY, guest);
-      return guest;
+  async ensureCustomer() {
+    let current = await this.restoreSession();
+    if (current) return current;
+    try {
+      const client = await getSupabase();
+      const anonymous = await client.auth.signInAnonymously({
+        options: { data: { display_name: "" } },
+      });
+      if (anonymous.data?.user) return loadProfile(anonymous.data.user.id);
+
+      const guest = await rpc("create_guest_login");
+      if (!guest?.ok) throw new Error(guest?.code || "anonymous_login_failed");
+      const { data, error } = await client.auth.signInWithPassword({
+        email: guest.email,
+        password: guest.password,
+      });
+      if (error || !data.user) throw error || new Error("anonymous_login_failed");
+      return loadProfile(data.user.id);
+    } catch (error) {
+      console.error("Customer session failed", error);
+      return null;
     }
-    const db = getDb();
-    const user = db.Users.find((u) => u.user_id === "user_c001");
-    const guest = {
-      user_id: user.user_id,
-      name: user.name,
-      grade: user.grade || "",
-      role: "customer",
-      store_id: "",
-    };
-    if (s && (s.role === "admin" || s.role === "store")) return guest;
-    storage.set(config.SESSION_KEY, guest);
-    return guest;
   },
 
-  setCustomerName(name) {
-    return this.setCustomerProfile(name, this.ensureCustomer().grade || "");
-  },
-
-  setCustomerProfile(name, grade) {
-    const n = String(name || "").trim();
-    const g = String(grade || "").trim();
-    if (!n) return { ok: false, code: "need_name" };
-    if (!g) return { ok: false, code: "need_grade" };
-    if (!CUSTOMER_GRADES.has(g)) return { ok: false, code: "invalid_grade" };
-    const live = this.getSession();
-    if (live && (live.role === "admin" || live.role === "store")) {
-      const session = { ...getGuest(), name: n, grade: g };
-      storage.set(config.GUEST_KEY, session);
-      return { ok: true, session };
-    }
-    const s = this.ensureCustomer();
-    if (!config.USE_MOCK) {
-      const session = { ...s, name: n, grade: g, role: "customer" };
-      storage.set(config.GUEST_KEY, session);
-      storage.set(config.SESSION_KEY, session);
-      return { ok: true, session };
-    }
-    const db = getDb();
-    const user = db.Users.find((u) => u.user_id === s.user_id);
-    if (user) {
-      user.name = n;
-      user.grade = g;
-    }
-    saveDb(db);
-    const session = { ...s, name: n, grade: g, role: "customer" };
-    storage.set(config.SESSION_KEY, session);
+  async setCustomerProfile(name, grade) {
+    const displayName = String(name || "").trim();
+    const gradeValue = String(grade || "").trim();
+    if (!displayName) return { ok: false, code: "need_name" };
+    if (!gradeValue) return { ok: false, code: "need_grade" };
+    if (!CUSTOMER_GRADES.has(gradeValue)) return { ok: false, code: "invalid_grade" };
+    const result = await rpc("update_my_profile", {
+      p_display_name: displayName,
+      p_grade: gradeValue,
+    });
+    if (!result?.ok) return result;
+    const session = writeProfile({
+      ...readProfile(),
+      name: result.profile.display_name,
+      grade: result.profile.grade,
+    });
     return { ok: true, session };
   },
 };
+
+getSupabase()
+  .then((client) => {
+    client.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT" || event === "USER_DELETED") writeProfile(null);
+    });
+  })
+  .catch(() => {
+    // Individual pages surface the setup error.
+  });

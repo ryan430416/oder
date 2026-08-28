@@ -20,13 +20,6 @@
   <main class="wrap">
     <div class="grid" id="list"></div>
   </main>
-  <script type="module">
-    import { initI18n } from "../js/i18n.js";
-    import { auth } from "../js/auth.js";
-    import { renderNoticeList } from "../js/pages/notices.js";
-    initI18n();
-    auth.ensureCustomer();
-    renderNoticeList();
-  </script>
+  <script type="module" src="../js/pages/customer-notifications.js"></script>
 </body>
 </html>

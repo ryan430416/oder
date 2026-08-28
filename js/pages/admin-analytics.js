@@ -5,7 +5,7 @@ import { t, storeLabel } from "../i18n.js";
 import { bootAdmin } from "../admin-boot.js";
 import { escapeHtml } from "../html.js";
 
-if (!bootAdmin()) throw new Error("admin");
+if (!(await bootAdmin())) throw new Error("admin");
 
 const stats = await api.getAdminStats();
 if (!stats) {

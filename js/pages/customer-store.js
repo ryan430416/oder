@@ -6,9 +6,12 @@ import { qs } from "../nav.js";
 import { initI18n, t, storeLabel, productLabel, productDesc, categoryLabel } from "../i18n.js";
 import { escapeAttr, escapeHtml, productImageHtml } from "../html.js";
 import { servicePeriodsLabel } from "../service-periods.js";
+import { mountImageUi } from "../image-ui.js";
+import { mountIcons } from "../icons.js";
 
 initI18n();
-auth.ensureCustomer();
+mountIcons();
+if (!(await auth.ensureCustomer())) throw new Error("backend_unavailable");
 
 const params = new URLSearchParams(location.search);
 const storeId = params.get("store_id") || "";
@@ -65,6 +68,7 @@ function drawMenu() {
       </article>`;
     })
     .join("");
+  mountImageUi(menuEl);
 }
 
 catsEl.addEventListener("click", (e) => {
@@ -85,7 +89,7 @@ menuEl.addEventListener("click", (e) => {
       cart.clear();
       cart.add(product, 1);
     } else return;
-  }
+  } else if (!result.ok) alert(t("invalid_items"));
   refreshBadge();
 });
 

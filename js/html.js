@@ -16,8 +16,8 @@ export const escapeAttr = escapeHtml;
 
 export function productImageHtml(image, alt = "") {
   const value = String(image || "").trim();
-  if (/^(https?:\/\/|data:image\/|blob:)/i.test(value)) {
-    return `<img class="product-photo" src="${escapeAttr(value)}" alt="${escapeAttr(alt)}" loading="lazy" />`;
+  if (/^(https:\/\/|blob:)/i.test(value)) {
+    return `<button class="product-image-button" type="button" data-image-preview="${escapeAttr(value)}" aria-label="${escapeAttr(alt)}"><img class="product-photo" src="${escapeAttr(value)}" alt="${escapeAttr(alt)}" loading="lazy" /></button>`;
   }
-  return `<span class="product-emoji" aria-hidden="true">${escapeHtml(value || "🍽️")}</span>`;
+  return `<div class="product-photo product-photo-placeholder" role="img" aria-label="${escapeAttr(alt)}"><span>No image</span></div>`;
 }

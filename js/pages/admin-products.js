@@ -3,146 +3,209 @@ import { money } from "../format.js";
 import { qs } from "../nav.js";
 import { t, storeLabel, productLabel, productDesc, categoryLabel } from "../i18n.js";
 import { bootAdmin } from "../admin-boot.js";
-import { mountIconPick } from "../easy-pick.js";
 import { escapeAttr, escapeHtml, productImageHtml } from "../html.js";
-import { uploadProductImage } from "../product-image.js";
+import {
+  deleteProductImage,
+  uploadProductImage,
+  validateProductImage,
+} from "../product-image.js";
+import { mountImageUi } from "../image-ui.js";
+import { showToast } from "../toast.js";
 
-if (!bootAdmin()) throw new Error("admin");
+if (!(await bootAdmin())) throw new Error("admin");
 
 const pick = qs("#storePick");
 const form = qs("#form");
 const list = qs("#list");
 const msg = qs("#msg");
 const submitBtn = qs("#submitBtn");
-const iconPick = qs("#iconPick");
 const photoInput = qs("#adminProductPhoto");
 const photoPreview = qs("#photoPreview");
+const progress = qs("#uploadProgress");
+const removePhoto = qs("#removePhoto");
+const retryUpload = qs("#retryUpload");
+let currentImagePath = "";
+let originalImagePath = "";
+let previewUrl = "";
 
-mountIconPick(iconPick, { name: "image", value: "🍽️" });
-photoInput.addEventListener("change", () => {
+mountImageUi();
+
+function clearPreviewUrl() {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = "";
+}
+
+function showPreview(url, alt = "") {
+  photoPreview.innerHTML = productImageHtml(url, alt);
+  removePhoto.hidden = !url;
+  mountImageUi(photoPreview);
+}
+
+function resetForm() {
+  form.reset();
+  form.product_id.value = "";
+  currentImagePath = "";
+  originalImagePath = "";
+  clearPreviewUrl();
+  showPreview("");
+  progress.hidden = true;
+  retryUpload.hidden = true;
+  submitBtn.disabled = false;
+  submitBtn.textContent = t("form_add_product");
+}
+
+photoInput.addEventListener("change", async () => {
+  clearPreviewUrl();
   const file = photoInput.files[0];
-  photoPreview.innerHTML = file ? productImageHtml(URL.createObjectURL(file), file.name) : "";
+  if (!file) return;
+  const validation = await validateProductImage(file);
+  if (!validation.ok) {
+    photoInput.value = "";
+    msg.textContent = t(validation.code);
+    return;
+  }
+  previewUrl = URL.createObjectURL(file);
+  showPreview(previewUrl, file.name);
+  msg.textContent = t("image_ready");
 });
 
-function payload() {
-  const data = Object.fromEntries(new FormData(form).entries());
-  data.store_id = pick.value;
-  return data;
-}
+removePhoto.addEventListener("click", () => {
+  clearPreviewUrl();
+  currentImagePath = "";
+  photoInput.value = "";
+  showPreview("");
+});
+retryUpload.addEventListener("click", () => form.requestSubmit());
 
 async function fillStores() {
   const stores = await api.getStores();
-  const want = new URLSearchParams(location.search).get("store_id") || "";
+  const requested = new URLSearchParams(location.search).get("store_id") || "";
   pick.innerHTML = stores
-    .map((s) => `<option value="${escapeAttr(s.store_id)}">${escapeHtml(storeLabel(s).name)} (${escapeHtml(s.store_id)})</option>`)
+    .map(
+      (store) =>
+        `<option value="${escapeAttr(store.store_id)}">${escapeHtml(storeLabel(store).name)}</option>`
+    )
     .join("");
   if (!stores.length) pick.innerHTML = `<option value="">${t("no_stores")}</option>`;
-  if (want && stores.some((s) => s.store_id === want)) pick.value = want;
+  if (requested && stores.some((store) => store.store_id === requested)) pick.value = requested;
 }
 
 async function render() {
-  const storeId = pick.value;
-  if (!storeId) {
+  if (!pick.value) {
     list.innerHTML = `<p class="empty">${t("no_stores")}</p>`;
     return;
   }
-  const products = await api.getProducts(storeId);
+  list.setAttribute("aria-busy", "true");
+  const products = await api.getProducts(pick.value);
+  list.removeAttribute("aria-busy");
   if (!products.length) {
     list.innerHTML = `<p class="empty">${t("no_products")}</p>`;
     return;
   }
   list.innerHTML = products
     .map(
-      (p) => `
-    <article class="card">
-      ${productImageHtml(p.image, p.product_name)}
-      <strong>${escapeHtml(productLabel(p.product_id, p.product_name))}</strong>
-      <div class="muted">${escapeHtml(categoryLabel(p.category))} · ${escapeHtml(p.product_id)}</div>
-      <div class="muted">${escapeHtml(productDesc(p.product_id, p.description))}</div>
-      <div>${money(p.price)}</div>
-      <span class="badge ${p.status === "active" ? "" : "sold"}">${p.status === "active" ? t("listed") : t("soldout")}</span>
-      <div class="row-actions">
-        <button class="btn btn-ghost" type="button" data-edit="${escapeAttr(p.product_id)}">${escapeHtml(t("edit"))}</button>
-        <button class="btn btn-danger" type="button" data-del="${escapeAttr(p.product_id)}">${escapeHtml(t("delete"))}</button>
-      </div>
-    </article>`
+      (product) => `
+      <article class="card product-admin-card">
+        ${productImageHtml(product.image, product.product_name)}
+        <strong>${escapeHtml(productLabel(product.product_id, product.product_name))}</strong>
+        <div class="muted">${escapeHtml(categoryLabel(product.category))}</div>
+        <div class="muted">${escapeHtml(productDesc(product.product_id, product.description))}</div>
+        <div>${money(product.price)}</div>
+        <span class="badge ${escapeAttr(product.status)}">${escapeHtml(t(product.status === "active" ? "listed" : product.status))}</span>
+        <div class="row-actions">
+          <button class="btn btn-ghost" type="button" data-edit="${escapeAttr(product.product_id)}">${escapeHtml(t("edit"))}</button>
+          <button class="btn btn-danger" type="button" data-del="${escapeAttr(product.product_id)}">${escapeHtml(t("delete"))}</button>
+        </div>
+      </article>`
     )
     .join("");
+  mountImageUi(list);
 }
 
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!pick.value) return (msg.textContent = t("no_store"));
   msg.textContent = "";
-  const data = payload();
-  if (!data.store_id) {
-    msg.textContent = t("no_store");
-    return;
-  }
-  const upload = await uploadProductImage(photoInput.files[0], data.store_id);
-  if (!upload.ok) {
-    msg.textContent = t(upload.code);
-    return;
-  }
-  if (upload.url) data.image = upload.url;
-  const res = data.product_id
-    ? await api.updateProduct(data.product_id, data)
-    : await api.createProduct(data);
-  if (!res.ok) {
-    msg.textContent = t(res.code);
-    return;
-  }
-  msg.textContent = t("saved_ok");
-  form.reset();
-  form.product_id.value = "";
-  iconPick._set("🍽️");
-  photoPreview.replaceChildren();
-  submitBtn.textContent = t("form_add_product");
-  render();
-});
+  retryUpload.hidden = true;
+  const data = Object.fromEntries(new FormData(form).entries());
+  const productId = data.product_id || crypto.randomUUID();
+  const oldPath = originalImagePath;
+  let uploadedPath = "";
+  submitBtn.disabled = true;
 
-pick.addEventListener("change", () => {
-  form.reset();
-  form.product_id.value = "";
-  iconPick._set("🍽️");
-  photoPreview.replaceChildren();
-  submitBtn.textContent = t("form_add_product");
-  msg.textContent = "";
-  render();
-});
-
-list.addEventListener("click", async (e) => {
-  const del = e.target.closest("[data-del]");
-  if (del) {
-    const products = await api.getProducts(pick.value);
-    const p = products.find((x) => x.product_id === del.dataset.del);
-    if (!p) return;
-    if (!confirm(t("confirm_delete_product", { name: productLabel(p.product_id, p.product_name) }))) return;
-    const res = await api.deleteProduct(p.product_id);
-    msg.textContent = res.ok ? t("deleted_ok") : t(res.code);
-    if (res.ok && form.product_id.value === p.product_id) {
-      form.reset();
-      form.product_id.value = "";
-      iconPick._set("🍽️");
-      submitBtn.textContent = t("form_add_product");
+  if (photoInput.files[0]) {
+    progress.hidden = false;
+    progress.value = 0;
+    const upload = await uploadProductImage(photoInput.files[0], pick.value, productId, {
+      onProgress: (value) => (progress.value = value),
+    });
+    if (!upload.ok) {
+      msg.textContent = t(upload.code);
+      retryUpload.hidden = false;
+      submitBtn.disabled = false;
+      return;
     }
-    render();
+    uploadedPath = upload.path;
+  }
+  Object.assign(data, {
+    product_id: productId,
+    store_id: pick.value,
+    image_path: uploadedPath || currentImagePath || null,
+  });
+  const result = form.product_id.value
+    ? await api.updateProduct(productId, data)
+    : await api.createProduct(data);
+  if (!result.ok) {
+    if (uploadedPath) await deleteProductImage(uploadedPath);
+    msg.textContent = result.message || t(result.code || "backend_error");
+    submitBtn.disabled = false;
     return;
   }
-  const btn = e.target.closest("[data-edit]");
-  if (!btn) return;
+  if (oldPath && oldPath !== data.image_path) await deleteProductImage(oldPath);
+  msg.textContent = t("saved_ok");
+  showToast(t("saved_ok"));
+  resetForm();
+  await render();
+});
+
+pick.addEventListener("change", async () => {
+  resetForm();
+  msg.textContent = "";
+  await render();
+});
+
+list.addEventListener("click", async (event) => {
+  const deleteButton = event.target.closest("[data-del]");
+  const editButton = event.target.closest("[data-edit]");
+  if (!deleteButton && !editButton) return;
   const products = await api.getProducts(pick.value);
-  const p = products.find((x) => x.product_id === btn.dataset.edit);
-  if (!p) return;
-  form.product_id.value = p.product_id;
-  form.product_name.value = p.product_name;
-  form.category.value = p.category;
-  form.description.value = p.description;
-  form.price.value = p.price;
-  iconPick._set(p.image);
-  photoPreview.innerHTML = productImageHtml(p.image, p.product_name);
-  form.status.value = p.status;
+  const id = deleteButton?.dataset.del || editButton?.dataset.edit;
+  const product = products.find((item) => item.product_id === id);
+  if (!product) return;
+  if (deleteButton) {
+    if (!confirm(t("confirm_delete_product", { name: product.product_name }))) return;
+    const result = await api.deleteProduct(product.product_id);
+    if (result.ok && result.deleted && result.image_path) await deleteProductImage(result.image_path);
+    msg.textContent = result.ok
+      ? t(result.hidden ? "product_hidden_history" : "deleted_ok")
+      : t(result.code || "backend_error");
+    showToast(msg.textContent, result.ok ? "success" : "error");
+    if (result.ok && form.product_id.value === product.product_id) resetForm();
+    await render();
+    return;
+  }
+  form.product_id.value = product.product_id;
+  form.product_name.value = product.product_name;
+  form.category.value = product.category;
+  form.description.value = product.description;
+  form.price.value = product.price;
+  form.status.value = product.status;
+  currentImagePath = product.image_path || "";
+  originalImagePath = currentImagePath;
+  showPreview(product.image, product.product_name);
   submitBtn.textContent = t("form_save_product");
 });
 
+resetForm();
 await fillStores();
 await render();

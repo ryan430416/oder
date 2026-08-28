@@ -20,11 +20,6 @@
   <main class="wrap">
     <div class="grid" id="list"></div>
   </main>
-  <script type="module">
-    import { bootAdmin } from "../js/admin-boot.js";
-    import { renderNoticeList } from "../js/pages/notices.js";
-    if (!bootAdmin()) throw new Error("admin");
-    renderNoticeList();
-  </script>
+  <script type="module" src="../js/pages/admin-notifications.js"></script>
 </body>
 </html>

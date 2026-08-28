@@ -2,101 +2,121 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { isPickupTimeAllowed, pickupSlotsForStore } from "../js/format.js";
-import { escapeHtml } from "../js/html.js";
+import { escapeHtml, productImageHtml } from "../js/html.js";
+import {
+  buildProductImagePath,
+  detectImageMime,
+  IMAGE_LIMITS,
+  isValidProductImagePath,
+} from "../js/product-image.js";
+import { canCustomerCancel, canTransition } from "../js/order-status.js";
 
 const localDate = (hour, minute) => new Date(2026, 7, 27, hour, minute, 0, 0);
 
-test("HTML escaping neutralizes stored markup", () => {
+test("HTML escaping and image rendering reject executable URLs", () => {
   assert.equal(
     escapeHtml('<img src=x onerror="alert(1)">'),
     "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"
   );
+  assert.match(productImageHtml("javascript:alert(1)", "Meal"), /product-photo-placeholder/);
+  assert.doesNotMatch(productImageHtml("javascript:alert(1)", "Meal"), /javascript:/);
 });
 
-test("pickup slots respect store hours and closed status", () => {
-  const dayStore = { status: "open", open_time: "10:00", close_time: "20:00" };
-  const overnightStore = { status: "open", open_time: "18:00", close_time: "02:00" };
-
-  assert.equal(pickupSlotsForStore(dayStore, localDate(9, 0))[0].label, "10:00");
-  assert.equal(pickupSlotsForStore(dayStore, localDate(19, 40)).length, 0);
-  assert.equal(pickupSlotsForStore({ ...dayStore, status: "closed" }, localDate(9, 0)).length, 0);
-  assert.equal(pickupSlotsForStore(overnightStore, localDate(23, 0))[0].label, "23:15");
-  assert.equal(isPickupTimeAllowed(dayStore, localDate(10, 30).toISOString(), localDate(9, 0)), true);
-  assert.equal(isPickupTimeAllowed(dayStore, localDate(21, 0).toISOString(), localDate(9, 0)), false);
-  const schoolStore = { status: "open", service_periods: ["breakfast", "lunch"] };
-  assert.equal(isPickupTimeAllowed(schoolStore, localDate(9, 0).toISOString(), localDate(8, 0)), true);
-  assert.equal(isPickupTimeAllowed(schoolStore, localDate(10, 45).toISOString(), localDate(8, 0)), false);
-  assert.equal(isPickupTimeAllowed(schoolStore, localDate(12, 0).toISOString(), localDate(8, 0)), true);
+test("exact school pickup windows use five-minute slots", () => {
+  const store = {
+    status: "open",
+    service_periods: ["breakfast", "lunch", "afternoon_tea"],
+  };
+  assert.equal(isPickupTimeAllowed(store, localDate(8, 40).toISOString(), localDate(8, 0)), true);
+  assert.equal(isPickupTimeAllowed(store, localDate(8, 50).toISOString(), localDate(8, 0)), false);
+  assert.equal(isPickupTimeAllowed(store, localDate(12, 15).toISOString(), localDate(8, 0)), true);
+  assert.equal(isPickupTimeAllowed(store, localDate(17, 20).toISOString(), localDate(16, 0)), true);
+  assert.equal(isPickupTimeAllowed({ ...store, status: "closed" }, localDate(17, 20), localDate(16, 0)), false);
+  assert.ok(pickupSlotsForStore(store, localDate(8, 0)).every((slot) => {
+    const date = new Date(slot.value);
+    return date.getMinutes() % 5 === 0;
+  }));
 });
 
-test("order creation recalculates totals and rejects forged items", async () => {
+test("legacy operating windows correctly cross midnight", () => {
+  const overnight = {
+    status: "open",
+    service_periods: [],
+    open_time: "22:00",
+    close_time: "02:00",
+  };
+  assert.equal(
+    isPickupTimeAllowed(overnight, localDate(23, 0).toISOString(), localDate(21, 0)),
+    true
+  );
+  const afterMidnight = new Date(2026, 7, 28, 1, 0);
+  const beforeMidnight = new Date(2026, 7, 27, 23, 30);
+  assert.equal(isPickupTimeAllowed(overnight, afterMidnight.toISOString(), beforeMidnight), true);
+  assert.equal(
+    isPickupTimeAllowed(overnight, new Date(2026, 7, 28, 3, 0).toISOString(), beforeMidnight),
+    false
+  );
+});
+
+test("image signatures only accept JPEG, PNG and WebP", () => {
+  assert.equal(detectImageMime(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0])), "image/jpeg");
+  assert.equal(
+    detectImageMime(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+    "image/png"
+  );
+  assert.equal(
+    detectImageMime(Uint8Array.from([...Buffer.from("RIFF0000WEBP")])),
+    "image/webp"
+  );
+  assert.equal(detectImageMime(Uint8Array.from(Buffer.from("<svg>"))), "");
+  assert.equal(IMAGE_LIMITS.sourceBytes, 8 * 1024 * 1024);
+  assert.equal(IMAGE_LIMITS.outputBytes, 1024 * 1024);
+});
+
+test("Storage paths use store/product/UUID.webp", () => {
+  const storeId = "123e4567-e89b-42d3-a456-426614174000";
+  const productId = "123e4567-e89b-42d3-a456-426614174001";
+  const fileId = "123e4567-e89b-42d3-a456-426614174002";
+  const path = buildProductImagePath(storeId, productId, fileId);
+  assert.equal(path, `${storeId}/${productId}/${fileId}.webp`);
+  assert.equal(isValidProductImagePath(path, storeId), true);
+  assert.equal(isValidProductImagePath(path, "123e4567-e89b-42d3-a456-426614174999"), false);
+  assert.equal(isValidProductImagePath("data:image/png;base64,abc"), false);
+});
+
+test("order status can only advance through the full workflow", () => {
+  assert.equal(canTransition("pending", "accepted"), true);
+  assert.equal(canTransition("pending", "rejected"), true);
+  assert.equal(canTransition("pending", "ready"), false);
+  assert.equal(canTransition("accepted", "preparing"), true);
+  assert.equal(canTransition("accepted", "ready"), false);
+  assert.equal(canTransition("preparing", "ready"), true);
+  assert.equal(canTransition("ready", "completed"), true);
+  assert.equal(canTransition("completed", "pending"), false);
+  assert.equal(canCustomerCancel("pending"), true);
+  assert.equal(canCustomerCancel("accepted"), false);
+});
+
+test("cart enforces one store and quantity 1 to 99", async () => {
   const values = new Map();
   globalThis.localStorage = {
-    getItem: (key) => (values.has(key) ? values.get(key) : null),
+    getItem: (key) => values.get(key) ?? null,
     setItem: (key, value) => values.set(key, String(value)),
     removeItem: (key) => values.delete(key),
   };
-  globalThis.BroadcastChannel = class {
-    postMessage() {}
-  };
-
-  const { auth } = await import("../js/auth.js");
-  const { api } = await import("../js/api.js");
-
-  const now = new Date();
-  const timeAtOffset = (minutes) => {
-    const value = new Date(now.getTime() + minutes * 60 * 1000);
-    return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
-  };
-
-  assert.equal((await auth.login("admin", "1234")).ok, true);
-  const storeResult = await api.createStore({
-    store_name: "Test store",
-    username: "test_store",
-    password: "1234",
-    open_time: timeAtOffset(-60),
-    close_time: timeAtOffset(180),
-    service_periods: ["breakfast", "lunch"],
-    status: "open",
-  });
-  assert.equal(storeResult.ok, true);
-
-  const productResult = await api.createProduct({
-    store_id: storeResult.store.store_id,
-    product_name: "Test meal",
-    price: "50",
+  const { cart } = await import(`../js/cart.js?test=${Date.now()}`);
+  const product = {
+    product_id: "p1",
+    store_id: "s1",
+    product_name: "Meal",
+    price: 50,
     status: "active",
-  });
-  assert.equal(productResult.ok, true);
-
-  const pickup = pickupSlotsForStore(storeResult.store)[0];
-  assert.ok(pickup);
-  const orderResult = await api.createOrder({
-    customer_id: "test_customer",
-    customer_name: "Tester",
-    customer_grade: "high_2",
-    store_id: storeResult.store.store_id,
-    pickup_time: pickup.value,
-    payment_method: "cash",
-    items: [{ product_id: productResult.product.product_id, quantity: 2, unit_price: -999 }],
-  });
-  assert.equal(orderResult.ok, true);
-  assert.equal(orderResult.order.total, 100);
-
-  const forged = await api.createOrder({
-    customer_id: "test_customer",
-    customer_name: "Tester",
-    customer_grade: "high_2",
-    store_id: storeResult.store.store_id,
-    pickup_time: pickup.value,
-    payment_method: "cash",
-    items: [{ product_id: "missing", quantity: -1, unit_price: -999 }],
-  });
-  assert.deepEqual(forged, { ok: false, code: "invalid_items" });
-
-  assert.equal((await auth.login("test_store", "1234")).ok, true);
-  const invalidTransition = await api.updateOrderStatus(orderResult.order.order_id, "completed");
-  assert.equal(invalidTransition.ok, false);
-  assert.equal(invalidTransition.code, "invalid_status");
-  assert.equal((await api.updateOrderStatus(orderResult.order.order_id, "ready")).ok, true);
+  };
+  assert.equal(cart.add(product, 99).ok, true);
+  assert.equal(cart.add(product, 1).ok, false);
+  assert.equal(cart.count(), 99);
+  assert.equal(cart.add({ ...product, product_id: "p2", store_id: "s2" }, 1).code, "OTHER_STORE");
+  assert.equal(cart.add({ ...product, product_id: "p3", status: "soldout" }, 1).ok, false);
+  cart.setQty("p1", 200);
+  assert.equal(cart.count(), 99);
 });
