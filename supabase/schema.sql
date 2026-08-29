@@ -751,12 +751,12 @@ using (
     public.is_admin()
     or (
       public.current_store_id() is not null
-      and (storage.foldername(name))[1] = public.current_store_id()::text
+      and (storage.foldername(storage.objects.name))[1] = public.current_store_id()::text
     )
     or exists (
       select 1 from public.products p
       join public.stores s on s.id = p.store_id
-      where p.image_path = name
+      where p.image_path = storage.objects.name
         and p.status in ('active', 'soldout')
         and s.status = 'open'
     )
@@ -770,7 +770,7 @@ with check (
     public.is_admin()
     or (
       public.current_store_id() is not null
-      and (storage.foldername(name))[1] = public.current_store_id()::text
+      and (storage.foldername(storage.objects.name))[1] = public.current_store_id()::text
     )
   )
 );
@@ -782,7 +782,7 @@ using (
     public.is_admin()
     or (
       public.current_store_id() is not null
-      and (storage.foldername(name))[1] = public.current_store_id()::text
+      and (storage.foldername(storage.objects.name))[1] = public.current_store_id()::text
     )
   )
 )
@@ -792,7 +792,7 @@ with check (
     public.is_admin()
     or (
       public.current_store_id() is not null
-      and (storage.foldername(name))[1] = public.current_store_id()::text
+      and (storage.foldername(storage.objects.name))[1] = public.current_store_id()::text
     )
   )
 );
@@ -804,7 +804,7 @@ using (
     public.is_admin()
     or (
       public.current_store_id() is not null
-      and (storage.foldername(name))[1] = public.current_store_id()::text
+      and (storage.foldername(storage.objects.name))[1] = public.current_store_id()::text
     )
   )
 );

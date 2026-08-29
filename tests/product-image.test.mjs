@@ -81,7 +81,7 @@ test("storage migration is idempotent and scoped to authenticated owners", async
   const sql = await readFile(new URL("../supabase/migrations/011_product_image_storage.sql", import.meta.url), "utf8");
   assert.match(sql, /drop policy if exists product_images_insert_owner/);
   assert.match(sql, /to authenticated/);
-  assert.match(sql, /storage\.foldername\(name\)/);
+  assert.match(sql, /storage\.foldername\(storage\.objects\.name\)/);
   assert.doesNotMatch(sql, /alter table storage\.objects/i);
   assert.match(sql, /drop policy if exists "test upload product images"/);
 });
