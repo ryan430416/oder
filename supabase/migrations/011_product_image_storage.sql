@@ -1,5 +1,9 @@
 -- Idempotent Storage setup for product-images.
--- Paste into the Supabase SQL Editor. Policies apply to authenticated store owners and admins only.
+-- Paste into the Supabase SQL Editor as a single run.
+--
+-- Do not run ALTER TABLE on storage.objects. Hosted Supabase owns that table
+-- (role supabase_storage_admin). RLS is already enabled. ALTER TABLE causes:
+-- ERROR 42501: must be owner of table objects
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -14,8 +18,6 @@ on conflict (id) do update set
   file_size_limit = excluded.file_size_limit,
   allowed_mime_types = excluded.allowed_mime_types;
 
-alter table storage.objects enable row level security;
-
 drop policy if exists "test upload product images" on storage.objects;
 drop policy if exists "test update product images" on storage.objects;
 drop policy if exists "test delete product images" on storage.objects;
@@ -24,7 +26,6 @@ drop policy if exists product_images_insert_owner on storage.objects;
 drop policy if exists product_images_update_owner on storage.objects;
 drop policy if exists product_images_delete_owner on storage.objects;
 
--- Read: admin, owning store, or published catalog items.
 create policy product_images_read_published on storage.objects
 for select to anon, authenticated
 using (
@@ -46,8 +47,6 @@ using (
   )
 );
 
--- Write: authenticated store owner of first-folder UUID, or admin.
--- INSERT policies must use `name`, not storage.objects.name.
 create policy product_images_insert_owner on storage.objects
 for insert to authenticated
 with check (

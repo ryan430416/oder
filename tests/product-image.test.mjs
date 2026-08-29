@@ -82,6 +82,6 @@ test("storage migration is idempotent and scoped to authenticated owners", async
   assert.match(sql, /drop policy if exists product_images_insert_owner/);
   assert.match(sql, /to authenticated/);
   assert.match(sql, /storage\.foldername\(name\)/);
-  assert.doesNotMatch(sql, /grant[\s\S]*service_role/i);
+  assert.doesNotMatch(sql, /alter table storage\.objects/i);
   assert.match(sql, /drop policy if exists "test upload product images"/);
 });
