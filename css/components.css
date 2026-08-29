@@ -137,8 +137,19 @@ textarea {
 }
 
 .image-preview {
-  max-width: 220px;
+  max-width: min(220px, 100%);
   margin-top: 10px;
+  min-width: 0;
+}
+
+.image-preview img,
+.image-preview .product-photo {
+  max-width: 100%;
+}
+
+.product-admin-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 progress {

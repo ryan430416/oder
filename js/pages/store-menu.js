@@ -7,11 +7,12 @@ import { mountBell } from "../notify-ui.js";
 import { escapeAttr, escapeHtml, productImageHtml } from "../html.js";
 import {
   deleteProductImage,
-  uploadProductImage,
   validateProductImage,
 } from "../product-image.js";
+import { saveProductWithImage } from "../product-save.js";
 import { mountImageUi } from "../image-ui.js";
 import { showToast } from "../toast.js";
+import { createInflight } from "../ui-state.js";
 
 initI18n();
 if (!(await auth.requireRole("store", "index.html"))) throw new Error("store");
@@ -29,6 +30,7 @@ const retryUpload = qs("#retryUpload");
 let currentImagePath = "";
 let originalImagePath = "";
 let previewUrl = "";
+const gate = createInflight();
 
 mountImageUi();
 mountBell(qs("#bellHost"), "notifications.html");
@@ -116,49 +118,41 @@ async function render() {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
-  msg.textContent = "";
-  retryUpload.hidden = true;
-  const data = Object.fromEntries(new FormData(form).entries());
-  const productId = data.product_id || crypto.randomUUID();
-  const oldPath = originalImagePath;
-  let uploadedPath = "";
-  submitBtn.disabled = true;
-
-  if (photoInput.files[0]) {
-    progress.hidden = false;
+  const run = await gate.run(async () => {
+    msg.textContent = "";
+    retryUpload.hidden = true;
+    const data = Object.fromEntries(new FormData(form).entries());
+    const storeId = auth.getBoundStoreId();
+    submitBtn.disabled = true;
+    progress.hidden = !photoInput.files[0];
     progress.value = 0;
-    const upload = await uploadProductImage(
-      photoInput.files[0],
-      auth.getBoundStoreId(),
-      productId,
-      { onProgress: (value) => (progress.value = value) }
-    );
-    if (!upload.ok) {
-      msg.textContent = t(upload.code);
-      retryUpload.hidden = false;
+    let result;
+    try {
+      result = await saveProductWithImage({
+        isUpdate: Boolean(form.product_id.value),
+        productId: form.product_id.value,
+        storeId,
+        fields: data,
+        file: photoInput.files[0] || null,
+        currentImagePath,
+        previousImagePath: originalImagePath,
+        onProgress: (value) => (progress.value = value),
+      });
+    } finally {
       submitBtn.disabled = false;
+      progress.hidden = true;
+    }
+    if (!result.ok) {
+      msg.textContent = t(result.code || "image_upload_failed");
+      retryUpload.hidden = false;
       return;
     }
-    uploadedPath = upload.path;
-  }
-
-  data.product_id = productId;
-  data.image_path = uploadedPath || currentImagePath || null;
-  const result = data.product_id && form.product_id.value
-    ? await api.updateProduct(productId, data)
-    : await api.createProduct(data);
-  if (!result.ok) {
-    if (uploadedPath) await deleteProductImage(uploadedPath);
-    msg.textContent = result.message || t(result.code || "backend_error");
-    submitBtn.disabled = false;
-    return;
-  }
-  if (oldPath && oldPath !== data.image_path) await deleteProductImage(oldPath);
-  msg.textContent = t("saved_ok");
-  showToast(t("saved_ok"));
-  submitBtn.disabled = false;
-  resetForm();
-  await render();
+    msg.textContent = t("saved_ok");
+    showToast(t("saved_ok"));
+    resetForm();
+    await render();
+  });
+  if (run?.skipped) return;
 });
 
 cancelBtn.addEventListener("click", resetForm);

@@ -93,8 +93,9 @@ npm run seed:test-admin
 - 禁止將 Base64、Data URL 或 Blob 字串寫入 products 或 localStorage。
 - 前端檢查實際檔案簽章，只接受 JPEG、PNG、WebP，原始檔最大 8MB。
 - 圖片依 EXIF 方向解碼，最長邊縮至 1600px，轉為約 0.8 品質 WebP，輸出必須小於 1MB。
-- 路徑固定為 `store_id/product_id/uuid.webp`。
+- 路徑固定為 `store_id/product_id/uuid.webp`。新增商品時先建立資料列取得 `product_id`，再上傳圖片並回寫 `image_path`。
 - Storage policy 限制店家只能寫入自己的 store_id 資料夾，管理員可管理全部，匿名使用者不可寫入。
+- 既有專案請在 SQL Editor 執行 [`supabase/migrations/011_product_image_storage.sql`](supabase/migrations/011_product_image_storage.sql)（可重複執行）。
 - 商品建立失敗會刪除暫存圖片；更換或永久刪除商品時會清理舊圖片。
 
 ## 訂單安全

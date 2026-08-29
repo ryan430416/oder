@@ -37,6 +37,10 @@ test("RLS scopes products, orders, and notifications", () => {
 test("Storage policies enforce owner folders and reject oversized/non-image files", () => {
   assert.match(schema, /file_size_limit,\s*allowed_mime_types[\s\S]*1048576/i);
   assert.match(schema, /array\['image\/jpeg', 'image\/png', 'image\/webp'\]/);
-  assert.match(schema, /storage\.foldername\((?:storage\.objects\.)?name\)/);
+  assert.match(schema, /create policy product_images_insert_owner[\s\S]*storage\.foldername\(name\)/);
+  assert.doesNotMatch(
+    schema,
+    /create policy product_images_insert_owner[\s\S]*storage\.foldername\(storage\.objects\.name\)/
+  );
   assert.match(schema, /product_images_insert_owner[\s\S]*to authenticated/i);
 });

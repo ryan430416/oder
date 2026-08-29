@@ -322,21 +322,19 @@ export const supabaseApi = {
 
   async createProduct(payload) {
     const client = await getSupabase();
-    const id = payload.product_id || crypto.randomUUID();
-    const { data, error } = await client
-      .from("products")
-      .insert({
-        id,
-        store_id: payload.store_id || auth.getBoundStoreId(),
-        name: String(payload.product_name || "").trim(),
-        category: String(payload.category || "").trim(),
-        description: String(payload.description || "").trim(),
-        price: Number(payload.price),
-        image_path: payload.image_path || null,
-        status: payload.status || "active",
-      })
-      .select()
-      .single();
+    const storeId = payload.store_id || auth.getBoundStoreId();
+    if (!storeId) return { ok: false, code: "store_unbound" };
+    const row = {
+      store_id: storeId,
+      name: String(payload.product_name || "").trim(),
+      category: String(payload.category || "").trim(),
+      description: String(payload.description || "").trim(),
+      price: Number(payload.price),
+      image_path: payload.image_path || null,
+      status: payload.status || "active",
+    };
+    if (payload.product_id) row.id = payload.product_id;
+    const { data, error } = await client.from("products").insert(row).select().single();
     return error
       ? { ok: false, code: "backend_error", message: error.message }
       : { ok: true, product: normalizeProduct(data) };
