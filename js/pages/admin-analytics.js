@@ -12,7 +12,8 @@ if (!stats) {
   location.href = "index.html";
   throw new Error("admin session expired");
 }
-const stores = await api.getStores();
+const storesResult = await api.getStores();
+const stores = storesResult.ok ? storesResult.data || [] : [];
 const sname = (id) => {
   const s = stores.find((x) => x.store_id === id);
   return s ? storeLabel(s).name : id || "—";

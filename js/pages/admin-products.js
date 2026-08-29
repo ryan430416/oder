@@ -78,7 +78,8 @@ removePhoto.addEventListener("click", () => {
 retryUpload.addEventListener("click", () => form.requestSubmit());
 
 async function fillStores() {
-  const stores = await api.getStores();
+  const storesResult = await api.getStores();
+  const stores = storesResult.ok ? storesResult.data || [] : [];
   const requested = new URLSearchParams(location.search).get("store_id") || "";
   pick.innerHTML = stores
     .map(
@@ -96,7 +97,8 @@ async function render() {
     return;
   }
   list.setAttribute("aria-busy", "true");
-  const products = await api.getProducts(pick.value);
+  const productsResult = await api.getProducts(pick.value);
+  const products = productsResult.ok ? productsResult.data || [] : [];
   list.removeAttribute("aria-busy");
   if (!products.length) {
     list.innerHTML = `<p class="empty">${t("no_products")}</p>`;
@@ -178,7 +180,8 @@ list.addEventListener("click", async (event) => {
   const deleteButton = event.target.closest("[data-del]");
   const editButton = event.target.closest("[data-edit]");
   if (!deleteButton && !editButton) return;
-  const products = await api.getProducts(pick.value);
+  const productsResult = await api.getProducts(pick.value);
+  const products = productsResult.ok ? productsResult.data || [] : [];
   const id = deleteButton?.dataset.del || editButton?.dataset.edit;
   const product = products.find((item) => item.product_id === id);
   if (!product) return;

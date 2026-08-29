@@ -7,7 +7,8 @@ import { escapeAttr, escapeHtml } from "../html.js";
 
 if (!(await bootAdmin())) throw new Error("admin");
 
-const stores = await api.getStores();
+const storesResult = await api.getStores();
+const stores = storesResult.ok ? storesResult.data || [] : [];
 const list = qs("#list");
 const day = qs("#day");
 

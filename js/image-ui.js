@@ -1,15 +1,27 @@
+import { DEFAULT_PRODUCT_IMAGE } from "./html.js";
+
+export function applyProductImageFallback(image) {
+  if (!image) return image;
+  const fallback = image.dataset?.defaultSrc || DEFAULT_PRODUCT_IMAGE;
+  if (image.dataset.fallbackApplied === "1") return image;
+  image.dataset.fallbackApplied = "1";
+  image.src = fallback;
+  const button = typeof image.closest === "function" ? image.closest(".product-image-button") : null;
+  if (button?.parentNode) {
+    button.replaceWith(image);
+  }
+  return image;
+}
+
 export function mountImageUi(root = document) {
   root.querySelectorAll("img.product-photo").forEach((image) => {
     if (image.dataset.imageReady) return;
     image.dataset.imageReady = "1";
-    image.addEventListener("error", () => {
-      const placeholder = document.createElement("div");
-      placeholder.className = "product-photo product-photo-placeholder";
-      placeholder.setAttribute("role", "img");
-      placeholder.setAttribute("aria-label", image.alt || "No image");
-      placeholder.innerHTML = "<span>No image</span>";
-      image.closest(".product-image-button")?.replaceWith(placeholder);
-    });
+    if (!image.getAttribute("src")) {
+      applyProductImageFallback(image);
+      return;
+    }
+    image.addEventListener("error", () => applyProductImageFallback(image));
   });
 
   if (document.body.dataset.imageLightbox) return;

@@ -19,6 +19,7 @@
     </div>
   </header>
   <main class="wrap">
+    <div id="checkoutStatus" hidden></div>
     <div class="card checkout-block">
       <label for="custName"><strong data-i18n="cust_name"></strong></label>
       <input id="custName" class="search" style="margin:10px 0 0" autocomplete="name" required />
@@ -42,7 +43,7 @@
       </select>
     </div>
     <div class="card checkout-block" id="summary"></div>
-    <button class="btn btn-block" id="confirm" type="button" data-i18n="confirm_order">確認下單</button>
+    <button class="btn btn-block" id="confirm" type="button" disabled data-i18n="confirm_order">確認下單</button>
     <p class="muted" id="msg"></p>
   </main>
   <script type="module" src="../js/pages/customer-checkout.js"></script>

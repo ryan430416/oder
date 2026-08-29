@@ -6,14 +6,6 @@ import { config, loadConfig } from "../config.js";
 
 initI18n();
 mountPasswordToggles();
-await loadConfig();
-document.querySelector(".hint").hidden = !config.SHOW_TEST_ACCOUNT;
-if (new URLSearchParams(location.search).get("reason") === "session_expired") {
-  qs("#err").textContent = t("session_expired");
-}
-const s = await auth.restoreSession();
-if (s && s.role === "admin") goToPage("dashboard.html");
-
 qs("#form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const fd = new FormData(e.target);
@@ -32,3 +24,12 @@ qs("#form").addEventListener("submit", async (e) => {
   }
   goToPage("dashboard.html");
 });
+qs("#form").dataset.ready = "1";
+
+await loadConfig();
+document.querySelector(".hint").hidden = !config.SHOW_TEST_ACCOUNT;
+if (new URLSearchParams(location.search).get("reason") === "session_expired") {
+  qs("#err").textContent = t("session_expired");
+}
+const s = await auth.restoreSession();
+if (s && s.role === "admin") goToPage("dashboard.html");

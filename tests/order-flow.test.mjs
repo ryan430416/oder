@@ -18,8 +18,10 @@ test("HTML escaping and image rendering reject executable URLs", () => {
     escapeHtml('<img src=x onerror="alert(1)">'),
     "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;"
   );
-  assert.match(productImageHtml("javascript:alert(1)", "Meal"), /product-photo-placeholder/);
-  assert.doesNotMatch(productImageHtml("javascript:alert(1)", "Meal"), /javascript:/);
+  const html = productImageHtml("javascript:alert(1)", "Meal");
+  assert.match(html, /default-meal\.svg/);
+  assert.doesNotMatch(html, /javascript:/);
+  assert.doesNotMatch(html, /src=""/);
 });
 
 test("customers can order overnight for the next morning pickup window", () => {

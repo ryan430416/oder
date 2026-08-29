@@ -20,18 +20,13 @@
   </header>
   <main class="wrap">
     <p class="sub" data-i18n="admin_stores_sub"></p>
+    <p class="sub" id="schoolPickupNote"></p>
     <form class="card login-form easy-form" id="form">
       <input type="hidden" name="store_id" />
       <label for="storeName" data-i18n="form_store_name"></label>
       <input id="storeName" name="store_name" required />
       <label for="storeDescription" data-i18n="form_desc"></label>
       <textarea id="storeDescription" name="description" rows="2"></textarea>
-      <label data-i18n="service_periods"></label>
-      <div class="check-row">
-        <label><input type="checkbox" name="service_periods" value="breakfast" /> <span data-i18n="period_breakfast"></span></label>
-        <label><input type="checkbox" name="service_periods" value="lunch" /> <span data-i18n="period_lunch"></span></label>
-        <label><input type="checkbox" name="service_periods" value="afternoon_tea" /> <span data-i18n="period_afternoon_tea"></span></label>
-      </div>
       <label data-i18n="form_image"></label>
       <div id="iconPick"></div>
       <div id="resetBox" hidden>

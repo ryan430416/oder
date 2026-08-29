@@ -5,84 +5,122 @@ import { money, pickupSlotsForStore } from "../format.js";
 import { qs } from "../nav.js";
 import { initI18n, t, storeLabel, productLabel } from "../i18n.js";
 import { escapeHtml } from "../html.js";
+import { createInflight } from "../ui-state.js";
+import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
 
 initI18n();
-let session = await auth.ensureCustomer();
-if (!session) throw new Error("backend_unavailable");
+
 const c = cart.get();
 if (!c.items.length) {
   location.replace("cart.html");
-  throw new Error("empty_cart");
 }
 
-qs("#custName").value = session.name && session.name !== "學生小明" ? session.name : "";
-qs("#custGrade").value = session.grade || "";
-
-const store = await api.getStore(c.store_id);
 const pickup = qs("#pickup");
 const confirmButton = qs("#confirm");
 const msg = qs("#msg");
+const statusEl = qs("#checkoutStatus");
+const gate = createInflight();
 const idempotencyKey = crypto.randomUUID();
+let session = null;
 let pageError = "";
+let validItems = [];
 
-if (!store) pageError = "no_store";
-else if (store.status !== "open") pageError = "store_closed";
+confirmButton.disabled = true;
 
-const products = store ? await api.getProducts(store.store_id) : [];
-let priceChanged = false;
-const liveItems = c.items.map((item) => {
-  const product = products.find(
-    (candidate) => candidate.product_id === item.product_id && candidate.status === "active"
-  );
-  const quantity = Number(item.quantity);
-  const price = Number(product?.price);
-  if (
-    !product ||
-    !Number.isInteger(quantity) ||
-    quantity < 1 ||
-    quantity > 99 ||
-    !Number.isFinite(price) ||
-    price < 0
-  ) {
-    return null;
-  }
-  if (Number(item.unit_price) !== price) priceChanged = true;
-  return { ...item, quantity, product_name: product.product_name, unit_price: price };
-});
-if (liveItems.some((item) => !item)) pageError ||= "invalid_items";
-
-const slots = pickupSlotsForStore(store);
-slots.forEach((s) => {
-  const opt = document.createElement("option");
-  opt.value = s.value;
-  opt.textContent = s.label;
-  pickup.appendChild(opt);
-});
-if (!slots.length) pageError ||= "no_pickup_slots";
-if (pageError) {
-  const opt = document.createElement("option");
-  opt.textContent = t(pageError);
-  opt.value = "";
-  pickup.replaceChildren(opt);
-  confirmButton.disabled = true;
-  msg.textContent = t(pageError);
+function fillPickup(store) {
+  pickup.replaceChildren();
+  const slots = pickupSlotsForStore(store);
+  slots.forEach((s) => {
+    const opt = document.createElement("option");
+    opt.value = s.value;
+    opt.textContent = s.label;
+    pickup.appendChild(opt);
+  });
+  return slots;
 }
 
-const storeName = store ? storeLabel(store).name : c.store_id;
-const validItems = liveItems.filter(Boolean);
-const total = validItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
-qs("#summary").innerHTML = `
-  ${priceChanged ? `<p class="notice">${escapeHtml(t("price_updated"))}</p>` : ""}
-  <strong>${escapeHtml(t("order_content"))}</strong>
-  <p class="muted">${escapeHtml(storeName)}</p>
-  <ul class="item-list">
-    ${validItems.map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}　${money(i.unit_price * i.quantity)}</li>`).join("")}
-  </ul>
-  <p><strong>${escapeHtml(t("sum", { amount: money(total) }))}</strong></p>
-`;
+async function loadCheckout() {
+  const run = await gate.run(async () => {
+    confirmButton.disabled = true;
+    msg.textContent = t("checkout_updating");
+    qs("#summary").innerHTML = `<div class="skeleton" aria-hidden="true"></div>`;
+    try {
+      session = await auth.ensureCustomer();
+      if (!session) throw new Error("backend_unavailable");
+      qs("#custName").value = session.name && session.name !== "學生小明" ? session.name : "";
+      qs("#custGrade").value = session.grade || "";
+      const storeResult = await api.getStore(c.store_id);
+      if (!storeResult.ok) throw new Error("backend_error");
+      const store = storeResult.data;
+      pageError = "";
+      if (!store) pageError = "no_store";
+      else if (store.status !== "open") pageError = "store_closed";
+      const productResult = store ? await api.getProducts(store.store_id) : { ok: true, data: [] };
+      if (!productResult.ok) throw new Error("backend_error");
+      const products = productResult.data || [];
+      let priceChanged = false;
+      const liveItems = c.items.map((item) => {
+        const product = products.find(
+          (candidate) => candidate.product_id === item.product_id && candidate.status === "active"
+        );
+        const quantity = Number(item.quantity);
+        const price = Number(product?.price);
+        if (
+          !product ||
+          !Number.isInteger(quantity) ||
+          quantity < 1 ||
+          quantity > 99 ||
+          !Number.isFinite(price) ||
+          price < 0
+        ) {
+          return null;
+        }
+        if (Number(item.unit_price) !== price) priceChanged = true;
+        return { ...item, quantity, product_name: product.product_name, unit_price: price };
+      });
+      if (liveItems.some((item) => !item)) pageError ||= "invalid_items";
+      const slots = fillPickup(store);
+      if (!slots.length) pageError ||= "no_pickup_slots";
+      hideBackendNotice(statusEl);
+      if (pageError) {
+        const opt = document.createElement("option");
+        opt.textContent = t(pageError);
+        opt.value = "";
+        pickup.replaceChildren(opt);
+        confirmButton.disabled = true;
+        msg.textContent = t(pageError);
+      } else {
+        msg.textContent = "";
+        confirmButton.disabled = false;
+      }
+      validItems = liveItems.filter(Boolean);
+      const total = validItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0);
+      const storeName = store ? storeLabel(store).name : t("no_store");
+      qs("#summary").innerHTML = `
+        ${priceChanged ? `<p class="notice">${escapeHtml(t("price_updated"))}</p>` : ""}
+        <strong>${escapeHtml(t("order_content"))}</strong>
+        <p class="muted">${escapeHtml(storeName)}</p>
+        <ul class="item-list">
+          ${validItems.map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}　${money(i.unit_price * i.quantity)}</li>`).join("")}
+        </ul>
+        <p><strong>${escapeHtml(t("sum", { amount: money(total) }))}</strong></p>
+      `;
+    } catch {
+      confirmButton.disabled = true;
+      msg.textContent = "";
+      qs("#summary").innerHTML = "";
+      renderBackendNotice(statusEl, {
+        code: "cart_load_failed",
+        busy: false,
+        onRetry: () => loadCheckout(),
+      });
+    }
+  });
+  if (run?.skipped) return;
+}
 
 confirmButton.addEventListener("click", async () => {
-  if (pageError || !pickup.value) return;
+  if (pageError || !pickup.value || confirmButton.disabled) return;
   const named = await auth.setCustomerProfile(qs("#custName").value, qs("#custGrade").value);
   if (!named.ok) {
     msg.textContent = t(named.code);
@@ -110,3 +148,5 @@ confirmButton.addEventListener("click", async () => {
     confirmButton.disabled = false;
   }
 });
+
+if (c.items.length) loadCheckout();

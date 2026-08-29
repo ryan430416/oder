@@ -43,6 +43,17 @@ export const SCHOOL_PICKUP_WINDOWS = [
   ["18:15", "18:25"],
 ];
 
+/**
+ * Legacy per-store meal-period flags. The admin UI no longer edits these;
+ * customer pickup always uses SCHOOL_PICKUP_WINDOWS. Keep writing the column
+ * so existing rows and database constraints stay intact.
+ */
+export const LEGACY_STORE_SERVICE_PERIODS = ["breakfast", "lunch", "afternoon_tea"];
+
+export function schoolPickupWindowsLabel() {
+  return SCHOOL_PICKUP_WINDOWS.map(([open, close]) => `${open}–${close}`).join("、");
+}
+
 export function normalizeServicePeriods(value) {
   const source = Array.isArray(value) ? value : [];
   const selected = new Set(source);

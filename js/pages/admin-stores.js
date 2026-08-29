@@ -5,7 +5,7 @@ import { bootAdmin } from "../admin-boot.js";
 import { mountIconPick } from "../easy-pick.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { mountPasswordToggles } from "../password-toggle.js";
-import { servicePeriodsLabel } from "../service-periods.js";
+import { schoolPickupWindowsLabel } from "../service-periods.js";
 
 if (!(await bootAdmin())) throw new Error("admin");
 mountPasswordToggles();
@@ -17,28 +17,21 @@ const loginFields = qs("#loginFields");
 const submitBtn = qs("#submitBtn");
 const cancelBtn = qs("#cancelEdit");
 const iconPick = qs("#iconPick");
+const pickupNote = qs("#schoolPickupNote");
 
 mountIconPick(iconPick, { name: "image", value: "🏪" });
+if (pickupNote) {
+  pickupNote.textContent = t("school_pickup_admin_note", { windows: schoolPickupWindowsLabel() });
+}
 
 function fdObj(f) {
   const formData = new FormData(f);
-  return {
-    ...Object.fromEntries(formData.entries()),
-    service_periods: formData.getAll("service_periods"),
-  };
-}
-
-function setPeriods(periods = ["breakfast", "lunch", "afternoon_tea"]) {
-  const selected = new Set(periods);
-  form.querySelectorAll('[name="service_periods"]').forEach((input) => {
-    input.checked = selected.has(input.value);
-  });
+  return Object.fromEntries(formData.entries());
 }
 
 function setCreateMode() {
   form.reset();
   form.store_id.value = "";
-  setPeriods();
   iconPick._set("🏪");
   loginFields.hidden = false;
   qs("#resetBox").hidden = true;
@@ -48,9 +41,14 @@ function setCreateMode() {
   cancelBtn.hidden = true;
 }
 
+async function loadStores() {
+  const result = await api.getStores();
+  return result.ok ? result.data || [] : [];
+}
+
 async function render() {
   const resets = await api.getPasswordResets();
-  const stores = await api.getStores();
+  const stores = await loadStores();
   const resetIds = new Set(resets.map((r) => r.store_id));
   if (!stores.length) {
     list.innerHTML = `<p class="empty">${t("no_stores")}</p>`;
@@ -66,7 +64,7 @@ async function render() {
         <div class="muted">${escapeHtml(s.store_id)}</div>
         ${resetIds.has(s.store_id) ? `<div class="badge off">${t("pending_reset")}</div>` : ""}
         <div class="muted">${escapeHtml(lab.desc)}</div>
-        <div class="muted">${escapeHtml(servicePeriodsLabel(s.service_periods))}</div>
+        <div class="muted">${escapeHtml(schoolPickupWindowsLabel())}</div>
         <span class="badge ${open ? "" : "off"}">${open ? t("open") : t("closed")}</span>
         <div class="row-actions">
           <button class="btn btn-ghost" type="button" data-edit="${escapeAttr(s.store_id)}">${escapeHtml(t("edit"))}</button>
@@ -85,10 +83,6 @@ form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const data = fdObj(form);
   msg.textContent = "";
-  if (!data.service_periods.length) {
-    msg.textContent = t("need_service_period");
-    return;
-  }
   let res;
   if (data.store_id) {
     res = await api.updateStore(data.store_id, data);
@@ -149,14 +143,13 @@ list.addEventListener("click", async (e) => {
   const edit = e.target.closest("[data-edit]");
   const tog = e.target.closest("[data-toggle]");
   const del = e.target.closest("[data-del]");
-  const stores = await api.getStores();
+  const stores = await loadStores();
   if (edit) {
     const s = stores.find((x) => x.store_id === edit.dataset.edit);
     if (!s) return;
     form.store_id.value = s.store_id;
     form.store_name.value = s.store_name;
     form.description.value = s.description || "";
-    setPeriods(s.service_periods);
     iconPick._set(s.image);
     loginFields.hidden = false;
     qs("#resetBox").hidden = false;

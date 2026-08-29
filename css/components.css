@@ -74,17 +74,25 @@ textarea {
   max-width: 260px;
   aspect-ratio: 4 / 3;
   object-fit: cover;
+  object-position: center;
   border-radius: 10px;
   margin-bottom: 8px;
+  background: #edf3ef;
+  overflow: hidden;
 }
 
 .product-image-button {
   display: block;
   width: 100%;
+  max-width: 260px;
   padding: 0;
   border: 0;
   background: transparent;
   cursor: zoom-in;
+}
+
+.product-image-button .product-photo {
+  max-width: none;
 }
 
 .product-photo-placeholder {
@@ -92,6 +100,15 @@ textarea {
   place-items: center;
   color: var(--muted);
   background: #edf3ef;
+}
+
+.btn[aria-disabled="true"] {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.notice p {
+  margin: 0 0 10px;
 }
 
 .image-lightbox {

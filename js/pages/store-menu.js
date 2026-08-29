@@ -87,7 +87,8 @@ retryUpload.addEventListener("click", () => form.requestSubmit());
 
 async function render() {
   list.setAttribute("aria-busy", "true");
-  const products = await api.getProducts(auth.getBoundStoreId());
+  const productsResult = await api.getProducts(auth.getBoundStoreId());
+  const products = productsResult.ok ? productsResult.data || [] : [];
   list.removeAttribute("aria-busy");
   if (!products.length) {
     list.innerHTML = `<p class="empty">${t("no_products")}</p>`;
@@ -166,7 +167,8 @@ list.addEventListener("click", async (event) => {
   const deleteButton = event.target.closest("[data-del]");
   const editButton = event.target.closest("[data-edit]");
   if (!deleteButton && !editButton) return;
-  const products = await api.getProducts(auth.getBoundStoreId());
+  const productsResult = await api.getProducts(auth.getBoundStoreId());
+  const products = productsResult.ok ? productsResult.data || [] : [];
   const productId = (deleteButton || editButton).dataset.del || editButton?.dataset.edit;
   const product = products.find((item) => item.product_id === productId);
   if (!product) return;

@@ -1,6 +1,6 @@
 import { auth } from "./auth.js";
 import { getSupabase, rpc } from "./supabase.js";
-import { normalizeServicePeriods, servicePeriodBounds } from "./service-periods.js";
+import { LEGACY_STORE_SERVICE_PERIODS, normalizeServicePeriods, servicePeriodBounds } from "./service-periods.js";
 
 function normalizeStore(row) {
   if (!row) return null;
@@ -42,6 +42,14 @@ function normalizeOrder(row) {
 function queryFailure(error, fallback = []) {
   if (error) console.error("Supabase query failed", error);
   return fallback;
+}
+
+function queryResult(error, data) {
+  if (error) {
+    console.error("Supabase query failed", error);
+    return { ok: false, data, code: "backend_error" };
+  }
+  return { ok: true, data };
 }
 
 async function withProductUrls(rows) {
@@ -90,25 +98,41 @@ async function adminRequest(path, body) {
 
 export const supabaseApi = {
   async getStores() {
-    const client = await getSupabase();
-    const { data, error } = await client.from("stores").select("*").order("created_at");
-    return error ? queryFailure(error) : (data || []).map(normalizeStore);
+    try {
+      const client = await getSupabase();
+      const { data, error } = await client.from("stores").select("*").order("created_at");
+      return error ? queryResult(error, []) : { ok: true, data: (data || []).map(normalizeStore) };
+    } catch (error) {
+      console.error("Supabase query failed", error);
+      return { ok: false, data: [], code: "backend_error" };
+    }
   },
 
   async getStore(storeId) {
-    const client = await getSupabase();
-    const { data, error } = await client.from("stores").select("*").eq("id", storeId).maybeSingle();
-    return error ? queryFailure(error, null) : normalizeStore(data);
+    try {
+      const client = await getSupabase();
+      const { data, error } = await client.from("stores").select("*").eq("id", storeId).maybeSingle();
+      return error ? queryResult(error, null) : { ok: true, data: normalizeStore(data) };
+    } catch (error) {
+      console.error("Supabase query failed", error);
+      return { ok: false, data: null, code: "backend_error" };
+    }
   },
 
   async getProducts(storeId) {
-    const client = await getSupabase();
-    const { data, error } = await client
-      .from("products")
-      .select("*")
-      .eq("store_id", storeId)
-      .order("created_at");
-    return error ? queryFailure(error) : withProductUrls(data);
+    try {
+      const client = await getSupabase();
+      const { data, error } = await client
+        .from("products")
+        .select("*")
+        .eq("store_id", storeId)
+        .order("created_at");
+      if (error) return queryResult(error, []);
+      return { ok: true, data: await withProductUrls(data) };
+    } catch (error) {
+      console.error("Supabase query failed", error);
+      return { ok: false, data: [], code: "backend_error" };
+    }
   },
 
   async updateCustomerProfile(name, grade) {
@@ -219,8 +243,8 @@ export const supabaseApi = {
 
   async createStore(payload) {
     const client = await getSupabase();
-    const periods = normalizeServicePeriods(payload.service_periods);
-    if (!periods.length) return { ok: false, code: "need_service_period" };
+    // Legacy column only: pickup windows are school-wide, not per-store.
+    const periods = LEGACY_STORE_SERVICE_PERIODS;
     const bounds = servicePeriodBounds(periods);
     const storeId = crypto.randomUUID();
     const { data, error } = await client
@@ -247,18 +271,12 @@ export const supabaseApi = {
   },
 
   async updateStore(storeId, patch) {
-    const periods =
-      patch.service_periods == null ? null : normalizeServicePeriods(patch.service_periods);
-    if (periods && !periods.length) return { ok: false, code: "need_service_period" };
     const values = {};
     if (patch.store_name != null) values.name = String(patch.store_name).trim();
     if (patch.description != null) values.description = String(patch.description).trim();
     if (patch.status != null) values.status = patch.status;
     if (patch.image && /^https:\/\//.test(patch.image)) values.image_url = patch.image;
-    if (periods) {
-      const bounds = servicePeriodBounds(periods);
-      Object.assign(values, bounds, { service_periods: periods });
-    }
+    // Ignore patch.service_periods: legacy column, not editable in the admin UI.
     const client = await getSupabase();
     const { data, error } = await client
       .from("stores")
