@@ -296,15 +296,8 @@ export const supabaseApi = {
     return { ok: true, store: normalizeStore(data) };
   },
 
-  async deleteStore(storeId) {
-    const client = await getSupabase();
-    const { count } = await client
-      .from("orders")
-      .select("id", { count: "exact", head: true })
-      .eq("store_id", storeId);
-    if (count) return this.updateStore(storeId, { status: "disabled" });
-    const { error } = await client.from("stores").delete().eq("id", storeId);
-    return error ? { ok: false, code: "backend_error" } : { ok: true };
+  deleteStore(storeId) {
+    return rpc("admin_delete_store", { p_store_id: storeId });
   },
 
   async getStoreImpact(storeId) {

@@ -558,6 +558,49 @@ begin
 end
 $$;
 
+create or replace function public.admin_delete_store(p_store_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_store public.stores%rowtype;
+  v_orders int := 0;
+  v_products int := 0;
+begin
+  if not public.is_admin() then
+    return jsonb_build_object('ok', false, 'code', 'not_admin');
+  end if;
+
+  select * into v_store from public.stores where id = p_store_id for update;
+  if not found then
+    return jsonb_build_object('ok', false, 'code', 'no_store');
+  end if;
+
+  update public.profiles
+  set role = 'customer',
+      status = 'disabled',
+      store_id = null
+  where store_id = p_store_id;
+
+  delete from public.orders where store_id = p_store_id;
+  get diagnostics v_orders = row_count;
+
+  delete from public.products where store_id = p_store_id;
+  get diagnostics v_products = row_count;
+
+  delete from public.stores where id = p_store_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'deleted', true,
+    'orders', v_orders,
+    'products', v_products
+  );
+end
+$$;
+
 create or replace function public.mark_notification_read(p_notification_id uuid)
 returns jsonb
 language plpgsql
@@ -585,6 +628,7 @@ revoke execute on function public.create_order(uuid, text, timestamptz, text, js
 revoke execute on function public.update_order_status(uuid, text) from public;
 revoke execute on function public.cancel_order(uuid) from public;
 revoke execute on function public.delete_or_hide_product(uuid) from public;
+revoke execute on function public.admin_delete_store(uuid) from public;
 create or replace function public.provision_email_user(
   p_email text,
   p_password text,
@@ -731,6 +775,7 @@ grant execute on function public.update_my_profile(text, text) to authenticated;
 grant execute on function public.update_order_status(uuid, text) to authenticated;
 grant execute on function public.cancel_order(uuid) to authenticated;
 grant execute on function public.delete_or_hide_product(uuid) to authenticated;
+grant execute on function public.admin_delete_store(uuid) to authenticated;
 grant execute on function public.mark_notification_read(uuid) to authenticated;
 
 insert into storage.buckets(id, name, public, file_size_limit, allowed_mime_types)
