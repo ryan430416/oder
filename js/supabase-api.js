@@ -1,6 +1,7 @@
 import { auth } from "./auth.js";
 import { getSupabase, rpc } from "./supabase.js";
 import { LEGACY_STORE_SERVICE_PERIODS, normalizeServicePeriods, servicePeriodBounds } from "./service-periods.js";
+import { normalizeStoreImage } from "./store-image.js";
 
 function normalizeStore(row) {
   if (!row) return null;
@@ -253,7 +254,7 @@ export const supabaseApi = {
         id: storeId,
         name: String(payload.store_name || "").trim(),
         description: String(payload.description || "").trim(),
-        image_url: payload.image && /^https:\/\//.test(payload.image) ? payload.image : null,
+        image_url: normalizeStoreImage(payload.image),
         open_time: bounds.open_time,
         close_time: bounds.close_time,
         service_periods: periods,
@@ -275,7 +276,7 @@ export const supabaseApi = {
     if (patch.store_name != null) values.name = String(patch.store_name).trim();
     if (patch.description != null) values.description = String(patch.description).trim();
     if (patch.status != null) values.status = patch.status;
-    if (patch.image && /^https:\/\//.test(patch.image)) values.image_url = patch.image;
+    if (patch.image !== undefined) values.image_url = normalizeStoreImage(patch.image);
     // Ignore patch.service_periods: legacy column, not editable in the admin UI.
     const client = await getSupabase();
     const { data, error } = await client

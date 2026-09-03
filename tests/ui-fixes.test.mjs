@@ -11,7 +11,6 @@ import { schoolPickupWindowsLabel } from "../js/service-periods.js";
 import { cartCheckoutEnabled, cartTotalDisplay, createInflight, storeListPhase } from "../js/ui-state.js";
 import { setLang, t } from "../js/i18n.js";
 
-const localDate = (hour, minute) => new Date(2026, 7, 27, hour, minute, 0, 0);
 const DATE_OR_DAY_RE = /今天|明天|today|tomorrow|\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}\/\d{1,2}/i;
 
 test("empty product image_url and image_path render the default meal image", () => {
@@ -98,7 +97,7 @@ test("cart loading does not display a false NT$0 total", () => {
 test("school pickup windows display time ranges only", () => {
   const labels = pickupSlotsForStore(
     { status: "open", service_periods: ["breakfast", "lunch", "afternoon_tea"] },
-    localDate(8, 0)
+    new Date("2026-08-27T08:00:00+08:00")
   ).map((slot) => slot.label);
   assert.deepEqual(labels, [
     "08:35–08:45",

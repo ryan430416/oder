@@ -7,6 +7,7 @@ const schema = await readFile(new URL("../supabase/schema.sql", import.meta.url)
 test("orders can be placed any time for today or tomorrow pickup windows", () => {
   assert.match(schema, /pickup_is_within_order_window/);
   assert.match(schema, /\(timezone\('Asia\/Taipei', now\(\)\)\)::date \+ 1/);
+  assert.match(schema, /extract\(minute from \(p_pickup_time at time zone 'Asia\/Taipei'\)\)::integer % 5/);
   assert.doesNotMatch(schema, /p_pickup_time > now\(\) \+ interval '24 hours'/);
 });
 

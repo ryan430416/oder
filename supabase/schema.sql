@@ -9,8 +9,8 @@ create table if not exists public.stores (
   description text not null default '' check (char_length(description) <= 500),
   image_url text,
   open_time time not null default '08:35',
-  close_time time not null default '13:00',
-  service_periods text[] not null default array['breakfast', 'lunch']::text[]
+  close_time time not null default '18:25',
+  service_periods text[] not null default array['breakfast', 'lunch', 'afternoon_tea']::text[]
     check (
       cardinality(service_periods) > 0
       and service_periods <@ array['breakfast', 'lunch', 'afternoon_tea']::text[]
@@ -404,8 +404,8 @@ begin
   select * into v_store from public.stores where id = p_store_id and status = 'open' for update;
   if not found then return jsonb_build_object('ok', false, 'code', 'store_closed'); end if;
   if not public.pickup_is_within_order_window(p_pickup_time)
-     or extract(minute from p_pickup_time)::integer % 5 <> 0
-     or extract(second from p_pickup_time) <> 0
+     or extract(minute from (p_pickup_time at time zone 'Asia/Taipei'))::integer % 5 <> 0
+     or extract(second from (p_pickup_time at time zone 'Asia/Taipei'))::integer <> 0
      or not public.is_service_pickup_time(
        v_store.service_periods,
        (p_pickup_time at time zone 'Asia/Taipei')::time

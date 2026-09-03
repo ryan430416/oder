@@ -3,9 +3,9 @@
  */
 import { t } from "./i18n.js";
 import { toTime24 } from "./format.js";
+import { STORE_ICONS } from "./store-image.js";
 
 const MINUTES = ["00", "15", "30", "45"];
-const ICONS = ["🍽️", "🏪", "🍗", "🍜", "🧋", "☕", "🍱", "🥗", "🍰", "🥟", "🥤"];
 
 export function hourLabel(h) {
   if (h === 0) return t("hour_0");
@@ -82,26 +82,33 @@ export function mountTimePick(root, { name, value, fallback }) {
 }
 
 export function mountIconPick(root, { name, value }) {
-  const cur = value || "🏪";
+  const cur = STORE_ICONS.includes(value) ? value : "🏪";
   root.innerHTML = `
-    <div class="easy-icons">
-      ${ICONS.map(
-        (ic) =>
-          `<button type="button" class="easy-icon ${ic === cur ? "on" : ""}" data-ic="${ic}">${ic}</button>`
+    <div class="easy-icons" role="listbox">
+      ${STORE_ICONS.map(
+        (ic, index) =>
+          `<button type="button" class="easy-icon ${ic === cur ? "on" : ""}" data-icon-index="${index}" aria-pressed="${
+            ic === cur ? "true" : "false"
+          }">${ic}</button>`
       ).join("")}
     </div>
     <input type="hidden" name="${name}" value="${cur}" />
   `;
   const hidden = root.querySelector("input[type=hidden]");
+  function applyIcon(ic) {
+    const next = STORE_ICONS.includes(ic) ? ic : "🏪";
+    hidden.value = next;
+    root.querySelectorAll(".easy-icon").forEach((b) => {
+      const on = STORE_ICONS[Number(b.dataset.iconIndex)] === next;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
   root.addEventListener("click", (e) => {
     const btn = e.target.closest(".easy-icon");
-    if (!btn) return;
-    hidden.value = btn.dataset.ic;
-    root.querySelectorAll(".easy-icon").forEach((b) => b.classList.toggle("on", b === btn));
+    if (!btn || !root.contains(btn)) return;
+    e.preventDefault();
+    applyIcon(STORE_ICONS[Number(btn.dataset.iconIndex)]);
   });
-  root._set = (v) => {
-    const ic = v || "🏪";
-    hidden.value = ic;
-    root.querySelectorAll(".easy-icon").forEach((b) => b.classList.toggle("on", b.dataset.ic === ic));
-  };
+  root._set = applyIcon;
 }
