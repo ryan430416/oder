@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const enabled = Boolean(process.env.E2E_BASE_URL);
-test.skip(!enabled, "Set E2E_BASE_URL and test Supabase environment variables.");
+test.skip(!enabled, "Set E2E_BASE_URL and a PocketBase test environment.");
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNk+M9QzwAEYBxVSFUAAN0ABf5uG14AAAAASUVORK5CYII=",
   "base64"

@@ -1,3 +1,4 @@
+import { config } from "./config.js";
 import { t } from "./i18n.js";
 
 /** Escape untrusted text before placing it inside an HTML template. */
@@ -19,7 +20,10 @@ export const escapeAttr = escapeHtml;
 export const DEFAULT_PRODUCT_IMAGE = new URL("../images/default-meal.svg", import.meta.url).href;
 
 function usableProductImage(image) {
-  return /^(https:\/\/|blob:)/i.test(String(image ?? "").trim());
+  const value = String(image ?? "").trim();
+  if (/^(https:\/\/|blob:)/i.test(value)) return true;
+  const base = String(config.POCKETBASE_URL || "").replace(/\/$/, "");
+  return Boolean(base) && value.startsWith(`${base}/`);
 }
 
 export function productImageSrc(image) {

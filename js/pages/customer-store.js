@@ -26,7 +26,7 @@ function refreshBadge() {
 async function boot() {
   menuEl.innerHTML = `<div class="card skeleton" aria-hidden="true"></div>`;
   try {
-    if (!(await auth.ensureCustomer())) throw new Error("backend_unavailable");
+    await auth.ensureCustomer();
     const params = new URLSearchParams(location.search);
     const storeId = params.get("store_id") || "";
     const storeResult = await api.getStore(storeId);

@@ -1,5 +1,5 @@
 import { config, loadConfig } from "./config.js";
-import { getSupabase } from "./supabase.js";
+import { getPocketBase } from "./pocketbase.js";
 
 export const PRODUCT_IMAGE_BUCKET = "product-images";
 
@@ -11,6 +11,7 @@ export const IMAGE_LIMITS = {
 
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const POCKETBASE_ID_PATTERN = /^[a-z0-9]{15}$/i;
 const DECLARED_TYPE_ALIAS = {
   "image/jpg": "image/jpeg",
   "image/pjpeg": "image/jpeg",
@@ -19,6 +20,11 @@ const DECLARED_TYPE_ALIAS = {
 
 export function isUuid(value) {
   return UUID_PATTERN.test(String(value || ""));
+}
+
+export function isRecordId(value) {
+  const text = String(value || "");
+  return isUuid(text) || POCKETBASE_ID_PATTERN.test(text);
 }
 
 export function detectImageMime(bytes) {
@@ -167,49 +173,59 @@ export function storageHttpErrorCode(status) {
   return "image_upload_failed";
 }
 
-function uploadBlob(path, blob, onProgress) {
+function uploadBlob(productId, blob, onProgress) {
   return new Promise(async (resolve) => {
     try {
       await loadConfig();
-      const client = await getSupabase();
-      const { data } = await client.auth.getSession();
-      const token = data.session?.access_token;
+      const client = await getPocketBase();
+      const token = client.authStore.token;
       if (!token) {
-        debugUpload({ stage: "auth", path, code: "session_expired" });
+        debugUpload({ stage: "auth", path: productId, code: "session_expired" });
         resolve({ ok: false, code: "session_expired" });
         return;
       }
+      const form = new FormData();
+      form.append("image", blob, "product.webp");
       const request = new XMLHttpRequest();
-      request.open("POST", `${config.SUPABASE_URL}/storage/v1/object/${PRODUCT_IMAGE_BUCKET}/${path}`);
-      request.setRequestHeader("apikey", config.SUPABASE_ANON_KEY);
+      request.open("PATCH", `${config.POCKETBASE_URL}/api/collections/products/records/${productId}`);
       request.setRequestHeader("Authorization", `Bearer ${token}`);
-      request.setRequestHeader("Content-Type", "image/webp");
-      request.setRequestHeader("x-upsert", "false");
       request.upload.onprogress = (event) => {
         if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
       };
       request.onerror = () => {
-        debugUpload({ stage: "upload-network", path, status: request.status, code: "image_network_failed" });
+        debugUpload({ stage: "upload-network", path: productId, status: request.status, code: "image_network_failed" });
         resolve({ ok: false, code: "image_network_failed" });
       };
       request.onload = () => {
         const ok = request.status >= 200 && request.status < 300;
         let remoteCode = "";
         try {
-          remoteCode = JSON.parse(request.responseText || "{}").error || JSON.parse(request.responseText || "{}").statusCode || "";
+          const parsed = JSON.parse(request.responseText || "{}");
+          remoteCode = parsed.data?.image?.code || parsed.message || "";
         } catch {
           remoteCode = "";
         }
         debugUpload({
           stage: "upload-response",
-          path,
+          path: productId,
           status: request.status,
           code: ok ? "ok" : remoteCode || storageHttpErrorCode(request.status),
         });
-        resolve(ok ? { ok: true, path } : { ok: false, code: storageHttpErrorCode(request.status) });
+        if (!ok) {
+          resolve({ ok: false, code: storageHttpErrorCode(request.status) });
+          return;
+        }
+        let filename = "";
+        try {
+          const parsed = JSON.parse(request.responseText || "{}");
+          filename = Array.isArray(parsed.image) ? parsed.image[0] : parsed.image || "";
+        } catch {
+          filename = "";
+        }
+        resolve({ ok: true, path: filename });
       };
-      debugUpload({ stage: "upload-start", path });
-      request.send(blob);
+      debugUpload({ stage: "upload-start", path: productId });
+      request.send(form);
     } catch (error) {
       console.error("Image upload failed", error);
       resolve({ ok: false, code: "image_upload_failed" });
@@ -219,31 +235,19 @@ function uploadBlob(path, blob, onProgress) {
 
 export async function uploadProductImage(file, storeId, productId, options = {}) {
   try {
-    if (!isUuid(storeId)) return { ok: false, code: "store_unbound" };
-    if (!isUuid(productId)) return { ok: false, code: "product_save_failed" };
+    if (!isRecordId(storeId)) return { ok: false, code: "store_unbound" };
+    if (!isRecordId(productId)) return { ok: false, code: "product_save_failed" };
     const compressed = await compressProductImage(file);
     if (!compressed.ok) return compressed;
     debugUpload({ stage: "compress", path: `${storeId}/${productId}`, code: "ok" });
-    const path = buildProductImagePath(storeId, productId);
-    return uploadBlob(path, compressed.blob, options.onProgress);
+    return uploadBlob(productId, compressed.blob, options.onProgress);
   } catch (error) {
     console.error("Image upload failed", error);
     return { ok: false, code: error?.message === "invalid_image_path" ? "store_unbound" : "image_upload_failed" };
   }
 }
 
-export async function deleteProductImage(path) {
-  if (!path) return { ok: true };
-  try {
-    const client = await getSupabase();
-    const { error } = await client.storage.from(PRODUCT_IMAGE_BUCKET).remove([path]);
-    if (error) {
-      debugUpload({ stage: "delete", path, code: error.message || "image_delete_failed" });
-      return { ok: false, code: "image_delete_failed" };
-    }
-    return { ok: true };
-  } catch (error) {
-    console.error("Image delete failed", error);
-    return { ok: false, code: "image_delete_failed" };
-  }
+export async function deleteProductImage(_path) {
+  // PocketBase deletes files with the product record, and a new upload replaces the old file.
+  return { ok: true };
 }

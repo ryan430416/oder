@@ -1,4 +1,5 @@
-import { getSupabase, rpc } from "./supabase.js";
+import { AUTH_COLLECTION } from "./collections.js";
+import { appSend, authRecord, getPocketBase } from "./pocketbase.js";
 import { pageHref } from "./nav.js";
 
 const PROFILE_KEY = "campus_order_profile";
@@ -27,20 +28,14 @@ function loginEmail(username) {
   return value.includes("@") ? value : `${value}@campus-order.test`;
 }
 
-async function loadProfile(userId) {
-  const client = await getSupabase();
-  const { data, error } = await client
-    .from("profiles")
-    .select("id, display_name, grade, role, store_id, status")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error || !data || data.status !== "active") return null;
+function loadProfileFromRecord(data) {
+  if (!data || data.status !== "active") return writeProfile(null);
   return writeProfile({
     user_id: data.id,
-    name: data.display_name || "",
+    name: data.display_name || data.name || "",
     grade: data.grade || "",
     role: data.role,
-    store_id: data.store_id || "",
+    store_id: data.store || "",
   });
 }
 
@@ -50,13 +45,19 @@ export const auth = {
   },
 
   async restoreSession() {
-    const client = await getSupabase();
-    const { data } = await client.auth.getSession();
-    if (!data.session?.user) {
+    const client = await getPocketBase();
+    if (!client.authStore.isValid) {
       writeProfile(null);
       return null;
     }
-    return loadProfile(data.session.user.id);
+    try {
+      await client.collection(AUTH_COLLECTION).authRefresh();
+    } catch {
+      client.authStore.clear();
+      writeProfile(null);
+      return null;
+    }
+    return loadProfileFromRecord(authRecord(client));
   },
 
   async requireRole(role, loginHref) {
@@ -78,29 +79,25 @@ export const auth = {
 
   async login(username, password) {
     try {
-      const client = await getSupabase();
-      const { data, error } = await client.auth.signInWithPassword({
-        email: loginEmail(username),
-        password: String(password || ""),
-      });
-      if (error || !data.user) return { ok: false, code: "bad_login" };
-      const profile = await loadProfile(data.user.id);
-      if (!profile) {
-        await client.auth.signOut();
-        return { ok: false, code: "disabled" };
+      const client = await getPocketBase();
+      await client.collection(AUTH_COLLECTION).authWithPassword(loginEmail(username), String(password || ""));
+      const record = authRecord(client);
+      if (!record || record.status !== "active") {
+        client.authStore.clear();
+        return { ok: false, code: record ? "disabled" : "bad_login" };
       }
-      return { ok: true, session: profile };
+      return { ok: true, session: loadProfileFromRecord(record) };
     } catch (error) {
-      console.error("Supabase login failed", error);
-      return { ok: false, code: "backend_error" };
+      console.error("PocketBase login failed", error);
+      return { ok: false, code: error?.status === 400 ? "bad_login" : "backend_error" };
     }
   },
 
   async logout() {
     writeProfile(null);
     try {
-      const client = await getSupabase();
-      await client.auth.signOut();
+      const client = await getPocketBase();
+      client.authStore.clear();
     } catch {
       // Local profile is already cleared.
     }
@@ -110,20 +107,11 @@ export const auth = {
     let current = await this.restoreSession();
     if (current) return current;
     try {
-      const client = await getSupabase();
-      const anonymous = await client.auth.signInAnonymously({
-        options: { data: { display_name: "" } },
-      });
-      if (anonymous.data?.user) return loadProfile(anonymous.data.user.id);
-
-      const guest = await rpc("create_guest_login");
-      if (!guest?.ok) throw new Error(guest?.code || "anonymous_login_failed");
-      const { data, error } = await client.auth.signInWithPassword({
-        email: guest.email,
-        password: guest.password,
-      });
-      if (error || !data.user) throw error || new Error("anonymous_login_failed");
-      return loadProfile(data.user.id);
+      const client = await getPocketBase();
+      const guest = await appSend("/api/app/guest-login");
+      if (!guest?.token || !guest?.record) throw new Error("anonymous_login_failed");
+      client.authStore.save(guest.token, guest.record);
+      return loadProfileFromRecord(guest.record);
     } catch (error) {
       console.error("Customer session failed", error);
       return null;
@@ -136,24 +124,24 @@ export const auth = {
     if (!displayName) return { ok: false, code: "need_name" };
     if (!gradeValue) return { ok: false, code: "need_grade" };
     if (!CUSTOMER_GRADES.has(gradeValue)) return { ok: false, code: "invalid_grade" };
-    const result = await rpc("update_my_profile", {
-      p_display_name: displayName,
-      p_grade: gradeValue,
+    const result = await appSend("/api/app/update-profile", {
+      display_name: displayName,
+      grade: gradeValue,
     });
     if (!result?.ok) return result;
     const session = writeProfile({
       ...readProfile(),
-      name: result.profile.display_name,
-      grade: result.profile.grade,
+      name: result.profile?.display_name || displayName,
+      grade: result.profile?.grade || gradeValue,
     });
     return { ok: true, session };
   },
 };
 
-getSupabase()
+getPocketBase()
   .then((client) => {
-    client.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT" || event === "USER_DELETED") writeProfile(null);
+    client.authStore.onChange(() => {
+      if (!client.authStore.isValid) writeProfile(null);
     });
   })
   .catch(() => {

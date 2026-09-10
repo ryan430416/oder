@@ -1,65 +1,66 @@
-const url = process.env.SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const url = (process.env.POCKETBASE_URL || "http://127.0.0.1:8090").replace(/\/$/, "");
 const appEnv = process.env.APP_ENV || "development";
 const username = process.env.TEST_ADMIN_USERNAME || "admin";
 const password = process.env.TEST_ADMIN_PASSWORD || "1234";
+const adminEmail = process.env.POCKETBASE_ADMIN_EMAIL || "";
+const adminPassword = process.env.POCKETBASE_ADMIN_PASSWORD || "";
 
-if (!url || !serviceKey) throw new Error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.");
 if (appEnv === "production") throw new Error("Refusing to seed a weak test account in production.");
 
 const email = username.includes("@") ? username : `${username}@campus-order.test`;
+
+if (!adminEmail || !adminPassword) {
+  console.log(`Test admin is created by PocketBase migrations on first serve: ${email}`);
+  console.log("Set POCKETBASE_ADMIN_EMAIL and POCKETBASE_ADMIN_PASSWORD to upsert it via the API.");
+  process.exit(0);
+}
+
+const authResponse = await fetch(`${url}/api/collections/_superusers/auth-with-password`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ identity: adminEmail, password: adminPassword }),
+});
+if (!authResponse.ok) {
+  throw new Error(`Unable to auth PocketBase superuser: ${await authResponse.text()}`);
+}
+const { token } = await authResponse.json();
 const headers = {
-  apikey: serviceKey,
-  Authorization: `Bearer ${serviceKey}`,
+  Authorization: token,
   "Content-Type": "application/json",
 };
 
 const listResponse = await fetch(
-  `${url}/auth/v1/admin/users?page=1&per_page=1000`,
+  `${url}/api/collections/oder_users/records?filter=${encodeURIComponent(`email="${email}"`)}`,
   { headers }
 );
 if (!listResponse.ok) throw new Error(`Unable to list users: ${await listResponse.text()}`);
-const users = (await listResponse.json()).users || [];
-let user = users.find((item) => item.email?.toLowerCase() === email.toLowerCase());
+const listed = await listResponse.json();
+const existing = (listed.items || [])[0];
+const payload = {
+  email,
+  password,
+  passwordConfirm: password,
+  verified: true,
+  display_name: "測試管理員",
+  name: "測試管理員",
+  role: "admin",
+  status: "active",
+};
 
-if (!user) {
-  const createResponse = await fetch(`${url}/auth/v1/admin/users`, {
+if (!existing) {
+  const created = await fetch(`${url}/api/collections/oder_users/records`, {
     method: "POST",
     headers,
-    body: JSON.stringify({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { display_name: "測試管理員" },
-    }),
+    body: JSON.stringify(payload),
   });
-  if (!createResponse.ok) {
-    throw new Error(
-      `Unable to create test admin. Testing password policy must allow 4 characters: ${await createResponse.text()}`
-    );
-  }
-  user = await createResponse.json();
+  if (!created.ok) throw new Error(`Unable to create test admin: ${await created.text()}`);
 } else {
-  const updateResponse = await fetch(`${url}/auth/v1/admin/users/${user.id}`, {
-    method: "PUT",
+  const updated = await fetch(`${url}/api/collections/oder_users/records/${existing.id}`, {
+    method: "PATCH",
     headers,
-    body: JSON.stringify({ password, email_confirm: true }),
+    body: JSON.stringify(payload),
   });
-  if (!updateResponse.ok) {
-    throw new Error(`Unable to reset test admin password: ${await updateResponse.text()}`);
-  }
+  if (!updated.ok) throw new Error(`Unable to update test admin: ${await updated.text()}`);
 }
 
-const profileResponse = await fetch(`${url}/rest/v1/profiles?id=eq.${user.id}`, {
-  method: "PATCH",
-  headers: { ...headers, Prefer: "return=minimal" },
-  body: JSON.stringify({
-    display_name: "測試管理員",
-    role: "admin",
-    store_id: null,
-    status: "active",
-  }),
-});
-if (!profileResponse.ok) throw new Error(`Unable to update admin profile: ${await profileResponse.text()}`);
-
-console.log(`Test admin ready: ${username} (${user.id})`);
+console.log(`Test admin ready: ${username}`);

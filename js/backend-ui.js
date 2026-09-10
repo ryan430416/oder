@@ -3,7 +3,8 @@ import { t } from "./i18n.js";
 const FRIENDLY_CODES = new Set([
   "backend_error",
   "backend_offline",
-  "supabase_not_configured",
+  "pocketbase_not_configured",
+  "server_not_configured",
   "stores_load_failed",
   "cart_load_failed",
 ]);

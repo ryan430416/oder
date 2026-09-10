@@ -2,42 +2,53 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const schema = await readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8");
+const hooks = await readFile(new URL("../pocketbase/pb_hooks/main.pb.js", import.meta.url), "utf8");
+const handlers = await readFile(new URL("../server/app-handlers.js", import.meta.url), "utf8");
+const schema = await readFile(
+  new URL("../pocketbase/pb_migrations/1700000001_init_collections.js", import.meta.url),
+  "utf8"
+);
 
 test("orders can be placed any time for today or tomorrow pickup windows", () => {
-  assert.match(schema, /pickup_is_within_order_window/);
-  assert.match(schema, /\(timezone\('Asia\/Taipei', now\(\)\)\)::date \+ 1/);
-  assert.match(schema, /extract\(minute from \(p_pickup_time at time zone 'Asia\/Taipei'\)\)::integer % 5/);
-  assert.doesNotMatch(schema, /p_pickup_time > now\(\) \+ interval '24 hours'/);
+  assert.match(hooks, /pickupIsWithinOrderWindow/);
+  assert.match(handlers, /pickupIsWithinOrderWindow/);
+  assert.match(hooks, /24 \* 60 \* 60 \* 1000/);
+  assert.match(hooks, /parts\.minute % 5 !== 0/);
+  assert.doesNotMatch(hooks, /24 hours/);
 });
 
-test("order RPC recalculates prices and enforces idempotency", () => {
-  assert.match(schema, /unique\s*\(customer_id,\s*idempotency_key\)/i);
-  assert.match(schema, /select \* into v_product from public\.products/i);
-  assert.match(schema, /v_total := v_total \+ \(v_product\.price \* v_qty\)/i);
-  assert.doesNotMatch(schema, /p_total/i);
+test("order APIs recalculate prices and enforce idempotency", () => {
+  assert.match(schema, /idx_orders_idempotency/);
+  assert.match(hooks, /product\.get\("price"\)/);
+  assert.match(handlers, /moneyInt\(product\.price\)/);
+  assert.match(hooks, /total \+= subtotal/);
+  assert.match(handlers, /total \+= subtotal/);
+  assert.doesNotMatch(hooks, /body\.total/);
+  assert.doesNotMatch(handlers, /body\.total/);
 });
 
 test("database enforces the complete sequential order workflow", () => {
-  assert.match(schema, /v_order\.status = 'pending' and p_next_status in \('accepted', 'rejected'\)/);
-  assert.match(schema, /v_order\.status = 'accepted' and p_next_status = 'preparing'/);
-  assert.match(schema, /v_order\.status = 'preparing' and p_next_status = 'ready'/);
-  assert.match(schema, /v_order\.status = 'ready' and p_next_status = 'completed'/);
+  assert.match(hooks, /current === "pending" && \(next === "accepted" \|\| next === "rejected"\)/);
+  assert.match(handlers, /canTransition\(order\.status, next\)/);
+  assert.match(hooks, /current === "accepted" && next === "preparing"/);
+  assert.match(hooks, /current === "preparing" && next === "ready"/);
+  assert.match(hooks, /current === "ready" && next === "completed"/);
 });
 
-test("RLS scopes products, orders, and notifications", () => {
-  for (const table of ["profiles", "stores", "products", "orders", "order_items", "notifications"]) {
-    assert.match(schema, new RegExp(`alter table public\\.${table} enable row level security`, "i"));
+test("collection rules scope products, orders, and notifications", () => {
+  for (const name of ["stores", "products", "orders", "order_items", "notifications"]) {
+    assert.match(schema, new RegExp(`name: "${name}"`));
   }
-  assert.match(schema, /store_id = public\.current_store_id\(\)/);
-  assert.match(schema, /customer_id = auth\.uid\(\)/);
-  assert.match(schema, /grant select on public\.stores, public\.products to anon/i);
-  assert.doesNotMatch(schema, /grant (?:insert|update|delete)[^;]+to anon/i);
+  assert.match(schema, /store = @request\.auth\.store/);
+  assert.match(schema, /customer = @request\.auth\.id/);
+  assert.match(schema, /createRule: null/);
+  assert.match(schema, /name: "oder_users"/);
+  assert.match(schema, /onlyInt: true/);
 });
 
-test("Storage policies enforce owner folders and reject oversized/non-image files", () => {
-  assert.match(schema, /file_size_limit,\s*allowed_mime_types[\s\S]*1048576/i);
-  assert.match(schema, /array\['image\/jpeg', 'image\/png', 'image\/webp'\]/);
-  assert.match(schema, /create policy product_images_insert_owner[\s\S]*storage\.foldername\(storage\.objects\.name\)/);
-  assert.match(schema, /product_images_insert_owner[\s\S]*to authenticated/i);
+test("product images are file fields limited to 1MB jpeg png webp", () => {
+  assert.match(schema, /maxSize: 1048576/);
+  assert.match(schema, /mimeTypes: \["image\/jpeg", "image\/png", "image\/webp"\]/);
+  assert.match(schema, /name: "image"/);
+  assert.match(schema, /protected: false/);
 });

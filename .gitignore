@@ -9,3 +9,7 @@ js/config.local.js
 node_modules/
 playwright-report/
 test-results/
+pocketbase/pb_data/
+pocketbase/pocketbase.exe
+pocketbase/pocketbase
+pocketbase/*.zip

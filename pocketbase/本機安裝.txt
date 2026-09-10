@@ -1,0 +1,8 @@
+本機 PocketBase：
+
+1. npm run pb:download
+2. npm run pb:serve 或 pb-serve.cmd
+3. 打開 http://127.0.0.1:8090/_/ 建立後台 Superuser（不要用 admin / 1234）
+4. 前端用 npx vercel dev，或複製 js/config.local.example.js 為 js/config.local.js
+
+網站測試帳號 admin / 1234 只存在 oder_users，不是後台 Superuser。

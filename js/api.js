@@ -1,2 +1,2 @@
-/** All persistent data operations use Supabase and are protected by RLS. */
-export { supabaseApi as api } from "./supabase-api.js";
+/** All persistent data operations use PocketBase collection APIs and hooks. */
+export { pocketbaseApi as api } from "./pocketbase-api.js";

@@ -1,7 +1,7 @@
 import { initI18n, t } from "../i18n.js";
 import { config, loadConfig } from "../config.js";
 import { mountIcons } from "../icons.js";
-import { pingBackend } from "../supabase.js";
+import { pingBackend } from "../pocketbase.js";
 import { createInflight } from "../ui-state.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
 

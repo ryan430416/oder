@@ -118,14 +118,14 @@ async function loadStores() {
 
 async function boot() {
   paint();
-  try {
-    const session = await auth.ensureCustomer();
-    if (!session) throw new Error("backend_unavailable");
+  qs("#cartCount").textContent = cart.count();
+  qs("#cartCount").hidden = cart.count() === 0;
+  qs("#search").addEventListener("input", () => paint());
+  const session = await auth.ensureCustomer();
+  if (session) {
     qs("#who").textContent = t("who", { name: session.name });
     qs("#custName").value = session.name === "學生小明" ? "" : session.name;
     qs("#custGrade").value = session.grade || "";
-    qs("#cartCount").textContent = cart.count();
-    qs("#cartCount").hidden = cart.count() === 0;
     mountBell(qs("#bellHost"), "notifications.html");
     qs("#saveName").addEventListener("click", async () => {
       const res = await auth.setCustomerProfile(qs("#custName").value, qs("#custGrade").value);
@@ -136,13 +136,8 @@ async function boot() {
       qs("#nameMsg").textContent = t("profile_saved");
       qs("#who").textContent = t("who", { name: res.session.name });
     });
-    qs("#search").addEventListener("input", () => paint());
-    await loadStores();
-  } catch {
-    loading = false;
-    loadError = true;
-    paint();
   }
+  await loadStores();
 }
 
 boot();

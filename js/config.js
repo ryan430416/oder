@@ -1,14 +1,29 @@
 /** Runtime values come from /api/config (Vercel) or ignored config.local.js. */
 export const config = {
-  SUPABASE_URL: "https://dlzdupbbfddqghlbixhb.supabase.co",
-  SUPABASE_ANON_KEY: "sb_publishable_nAnSRzMHlW3v5_C-DE6atg_YmANWVNq",
-  APP_ENV: "development",
-  SHOW_TEST_ACCOUNT: true,
+  POCKETBASE_URL: "",
+  APP_ENV: "production",
+  SHOW_TEST_ACCOUNT: false,
   CART_KEY: "campus_order_cart",
   LANG_KEY: "campus_order_lang",
 };
 
 let configPromise;
+
+export function sanitizePocketBaseUrl(value) {
+  const text = String(value || "").trim().replace(/\/$/, "");
+  if (!text) return "";
+  let parsed;
+  try {
+    parsed = new URL(text);
+  } catch {
+    return "";
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return "";
+  if (typeof location !== "undefined" && location.protocol === "https:" && parsed.protocol !== "https:") {
+    return "";
+  }
+  return parsed.origin;
+}
 
 export function loadConfig() {
   if (!configPromise) {
@@ -20,17 +35,18 @@ export function loadConfig() {
       } catch {
         // Local static servers use an ignored js/config.local.js file.
       }
-      if (!values.SUPABASE_URL) {
+      if (!sanitizePocketBaseUrl(values.POCKETBASE_URL)) {
         try {
           values = { ...values, ...((await import("./config.local.js")).localConfig || {}) };
         } catch {
-          // Keep committed public URL/anon key defaults.
+          // Keep empty until a valid HTTPS/HTTP origin is provided.
         }
       }
       Object.assign(
         config,
         Object.fromEntries(Object.entries(values).filter(([, value]) => value !== "" && value != null))
       );
+      config.POCKETBASE_URL = sanitizePocketBaseUrl(config.POCKETBASE_URL);
       config.SHOW_TEST_ACCOUNT =
         config.SHOW_TEST_ACCOUNT === true || String(config.SHOW_TEST_ACCOUNT) === "true";
       return config;
