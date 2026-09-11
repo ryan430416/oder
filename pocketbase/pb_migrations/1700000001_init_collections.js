@@ -107,9 +107,9 @@ migrate((app) => {
     type: "base",
     name: "products",
     listRule:
-      '@request.auth.id != "" && @request.auth.status = "active" && @request.auth.role = "admin" || (@request.auth.id != "" && @request.auth.status = "active" && @request.auth.role = "store" && store = @request.auth.store) || (status = "active" && store.status = "open")',
+      '@request.auth.id != "" && @request.auth.status = "active" && @request.auth.role = "admin" || (@request.auth.id != "" && @request.auth.status = "active" && @request.auth.role = "store" && store = @request.auth.store) || ((status = "active" || status = "soldout") && store.status = "open")',
     viewRule:
-      '@request.auth.id != "" && @request.auth.status = "active" && @request.auth.role = "admin" || (@request.auth.id != "" && @request.auth.status = "active" && @request.auth.role = "store" && store = @request.auth.store) || (status = "active" && store.status = "open")',
+      '@request.auth.id != "" && @request.auth.status = "active" && @request.auth.role = "admin" || (@request.auth.id != "" && @request.auth.status = "active" && @request.auth.role = "store" && store = @request.auth.store) || ((status = "active" || status = "soldout") && store.status = "open")',
     createRule:
       '@request.auth.id != "" && @request.auth.status = "active" && (@request.auth.role = "admin" || (@request.auth.role = "store" && store = @request.auth.store))',
     updateRule:

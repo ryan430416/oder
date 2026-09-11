@@ -23,8 +23,8 @@ export const COLLECTION_RULES = {
     deleteRule: null,
   },
   products: {
-    listRule: `${ADMIN} || (${STORE} && store = @request.auth.store) || (status = "active" && store.status = "open")`,
-    viewRule: `${ADMIN} || (${STORE} && store = @request.auth.store) || (status = "active" && store.status = "open")`,
+    listRule: `${ADMIN} || (${STORE} && store = @request.auth.store) || ((status = "active" || status = "soldout") && store.status = "open")`,
+    viewRule: `${ADMIN} || (${STORE} && store = @request.auth.store) || ((status = "active" || status = "soldout") && store.status = "open")`,
     createRule: `${ADMIN} || (${STORE} && store = @request.auth.store)`,
     updateRule: `${ADMIN} || (${STORE} && store = @request.auth.store && (@request.body.store:isset = false || @request.body.store = @request.auth.store))`,
     deleteRule: null,

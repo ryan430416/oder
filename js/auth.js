@@ -29,15 +29,26 @@ function loginEmail(username) {
   return value.includes("@") ? value : `${value}@campus-order.test`;
 }
 
+function displayNameOf(data) {
+  const value = String(data?.display_name || data?.name || "").trim();
+  return value;
+}
+
 function loadProfileFromRecord(data) {
   if (!data || data.status !== "active") return writeProfile(null);
   return writeProfile({
     user_id: data.id,
-    name: data.display_name || data.name || "",
+    name: displayNameOf(data),
     grade: data.grade || "",
     role: data.role,
     store_id: data.store || "",
   });
+}
+
+/** Customer-facing label: saved name, else guest. Never blank/undefined. */
+export function customerLabel(session, guestLabel = "訪客") {
+  const name = String(session?.name || "").trim();
+  return name || guestLabel;
 }
 
 export const auth = {

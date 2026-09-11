@@ -74,15 +74,33 @@ npx vercel dev
 
 production 不會用 seed 腳本建立弱密碼。本機第一次 `pb:serve` 就會建立：
 
-- 帳號：`admin`
-- 密碼：`1234`
+- 網站管理員：`admin` / `1234`（`oder_users`，**不是** PocketBase Superuser）
+- 測試店家：`shop1` / `1234`（跑 demo catalog seed 後）
 
-`SHOW_TEST_ACCOUNT=false` 時不顯示提示。正式環境請立刻改密或刪除該帳號。
+`SHOW_TEST_ACCOUNT=false` 時不顯示提示。密碼不會寫進前端 JavaScript 或 localStorage。
 
-若要重設這組帳號：
+### 測試店家與菜單
+
+在 **development**（`.env` 的 `APP_ENV` 不是 `production`）執行：
 
 ```bash
-POCKETBASE_ADMIN_EMAIL=you@example.com POCKETBASE_ADMIN_PASSWORD=your-superuser-password npm run seed:test-admin
+npm run seed:demo-catalog
+```
+
+會建立／更新：
+
+- 營業中店家「中央食堂」
+- 停用店家「暫停營業店」（顧客看不到）
+- active 商品：雞腿便當（含圖片）、燙青菜（無圖片 → 預設圖）
+- soldout 商品：每日特餐（可見但不可加入購物車）
+- 店家帳號 `shop1` / `1234`、管理員 `admin` / `1234`
+
+`APP_ENV=production` 時預設拒絕；若真的要在共用測試庫重跑，需額外設 `ALLOW_TEST_SEED=true`。
+
+若要只重設管理員：
+
+```bash
+npm run seed:test-admin
 ```
 
 ## 商品圖片規則

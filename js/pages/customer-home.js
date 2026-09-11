@@ -1,4 +1,4 @@
-import { auth } from "../auth.js";
+import { auth, customerLabel } from "../auth.js";
 import { api } from "../api.js";
 import { cart } from "../cart.js";
 import { qs } from "../nav.js";
@@ -136,9 +136,16 @@ async function loadStores() {
   if (run?.skipped) return;
 }
 
+function paintWho(session) {
+  const who = qs("#who");
+  if (!who) return;
+  who.textContent = t("who", { name: customerLabel(session, t("guest_name")) });
+  who.hidden = false;
+}
+
 function bindProfile(session) {
-  qs("#who").textContent = t("who", { name: session.name });
-  qs("#custName").value = session.name === "學生小明" ? "" : session.name;
+  paintWho(session);
+  qs("#custName").value = session.name || "";
   qs("#custGrade").value = session.grade || "";
   mountBell(qs("#bellHost"), "notifications.html");
   if (profileBound) return;
@@ -150,7 +157,7 @@ function bindProfile(session) {
       return;
     }
     qs("#nameMsg").textContent = t("profile_saved");
-    qs("#who").textContent = t("who", { name: res.session.name });
+    paintWho(res.session);
   });
 }
 

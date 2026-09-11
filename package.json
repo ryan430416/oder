@@ -9,6 +9,7 @@
     "pb:download": "node scripts/download-pocketbase.mjs",
     "pb:serve": "node scripts/serve-pocketbase.mjs",
     "seed:test-admin": "node scripts/seed-test-admin.mjs",
+    "seed:demo-catalog": "node scripts/seed-demo-catalog.mjs",
     "pb:setup-school": "node scripts/setup-school-collections.mjs"
   },
   "devDependencies": {
