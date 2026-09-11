@@ -46,7 +46,8 @@ async function loadCheckout() {
     qs("#summary").innerHTML = `<div class="skeleton" aria-hidden="true"></div>`;
     try {
       session = await auth.ensureCustomer();
-      if (!session) throw new Error("backend_unavailable");
+      if (!session?.ok) throw new Error("anonymous_login_failed");
+      session = session.session;
       qs("#custName").value = session.name && session.name !== "學生小明" ? session.name : "";
       qs("#custGrade").value = session.grade || "";
       const storeResult = await api.getStore(c.store_id);
@@ -105,12 +106,12 @@ async function loadCheckout() {
         </ul>
         <p><strong>${escapeHtml(t("sum", { amount: money(total) }))}</strong></p>
       `;
-    } catch {
+    } catch (error) {
       confirmButton.disabled = true;
       msg.textContent = "";
       qs("#summary").innerHTML = "";
       renderBackendNotice(statusEl, {
-        code: "cart_load_failed",
+        code: error?.message === "anonymous_login_failed" ? "anonymous_login_failed" : "cart_load_failed",
         busy: false,
         onRetry: () => loadCheckout(),
       });

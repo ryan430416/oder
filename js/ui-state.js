@@ -18,10 +18,18 @@ export function createInflight() {
   };
 }
 
-export function storeListPhase({ loading = false, error = false, stores = [] } = {}) {
+export function storeListPhase({
+  loading = false,
+  error = false,
+  authError = false,
+  stores = [],
+  searching = false,
+} = {}) {
+  if (authError) return "auth_error";
   if (loading && !stores.length) return "loading";
   if (error && !stores.length) return "error";
   if (!stores.length) return "empty";
+  if (searching) return "search";
   return "list";
 }
 

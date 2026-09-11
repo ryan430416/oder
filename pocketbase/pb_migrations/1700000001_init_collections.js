@@ -16,12 +16,14 @@ function ensureOderUsers(app) {
   const users = new Collection({
     type: "auth",
     name: "oder_users",
-    listRule: 'id = @request.auth.id || @request.auth.role = "admin"',
-    viewRule: 'id = @request.auth.id || @request.auth.role = "admin"',
-    createRule: null,
-    updateRule: '@request.auth.role = "admin"',
+    listRule: '@request.auth.id != "" && @request.auth.status = "active" && (id = @request.auth.id || @request.auth.role = "admin")',
+    viewRule: '@request.auth.id != "" && @request.auth.status = "active" && (id = @request.auth.id || @request.auth.role = "admin")',
+    createRule:
+      '@request.auth.id = "" && role = "customer" && status = "active" && (@request.body.store:isset = false || store = "")',
+    updateRule:
+      '@request.auth.id != "" && @request.auth.status = "active" && (@request.auth.role = "admin" || (@request.auth.role = "customer" && id = @request.auth.id && @request.body.role:isset = false && @request.body.status:isset = false && @request.body.store:isset = false))',
     deleteRule: null,
-    manageRule: '@request.auth.role = "admin"',
+    manageRule: '@request.auth.id != "" && @request.auth.status = "active" && @request.auth.role = "admin"',
     passwordAuth: {
       enabled: true,
       identityFields: ["email"],

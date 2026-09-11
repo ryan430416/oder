@@ -26,7 +26,8 @@ function refreshBadge() {
 async function boot() {
   menuEl.innerHTML = `<div class="card skeleton" aria-hidden="true"></div>`;
   try {
-    await auth.ensureCustomer();
+    const session = await auth.ensureCustomer();
+    if (!session?.ok) throw new Error("anonymous_login_failed");
     const params = new URLSearchParams(location.search);
     const storeId = params.get("store_id") || "";
     const storeResult = await api.getStore(storeId);
@@ -104,10 +105,10 @@ async function boot() {
 
     drawCats();
     drawMenu();
-  } catch {
+  } catch (error) {
     menuEl.innerHTML = "";
     renderBackendNotice(statusEl, {
-      code: "stores_load_failed",
+      code: error?.message === "anonymous_login_failed" ? "anonymous_login_failed" : "stores_load_failed",
       busy: false,
       onRetry: () => boot(),
     });

@@ -126,6 +126,63 @@ integration("customer cannot escalate role, bind a store, or rewrite order total
   });
 });
 
+integration("frontend guests can create a customer without a superuser token", async () => {
+  const id = crypto.randomUUID().replace(/-/g, "");
+  const email = `guest_${id}@campus-order.test`;
+  const password = `${id}Aa1`;
+  const created = await request("/api/collections/oder_users/records", {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+      password,
+      passwordConfirm: password,
+      role: "customer",
+      status: "active",
+      display_name: "",
+    }),
+  });
+  assert.equal(created.ok, true, JSON.stringify(created.data));
+  const asAdmin = await request("/api/collections/oder_users/records", {
+    method: "POST",
+    body: JSON.stringify({
+      email: `admintry_${id}@campus-order.test`,
+      password,
+      passwordConfirm: password,
+      role: "admin",
+      status: "active",
+    }),
+  });
+  assert.equal(asAdmin.ok, false);
+  const auth = await request("/api/collections/oder_users/auth-with-password", {
+    method: "POST",
+    body: JSON.stringify({ identity: email, password }),
+  });
+  assert.equal(auth.ok, true);
+  const userToken = auth.data.token;
+  const userId = auth.data.record.id;
+  const role = await request(`/api/collections/oder_users/records/${userId}`, {
+    method: "PATCH",
+    headers: { Authorization: userToken },
+    body: JSON.stringify({ role: "admin" }),
+  });
+  assert.equal(role.ok, false);
+  const storeBind = await request(`/api/collections/oder_users/records/${userId}`, {
+    method: "PATCH",
+    headers: { Authorization: userToken },
+    body: JSON.stringify({ store: "store0000000001" }),
+  });
+  assert.equal(storeBind.ok, false);
+  const others = await request("/api/collections/orders/records?perPage=50", {
+    headers: { Authorization: userToken },
+  });
+  assert.equal((others.data.items || []).every((row) => row.customer === userId), true);
+  const token = await superuser();
+  await request(`/api/collections/oder_users/records/${userId}`, {
+    method: "DELETE",
+    headers: { Authorization: token },
+  });
+});
+
 integration("trusted guest-login issues an oder_users token", async () => {
   const { handleAppAction } = await import("../server/app-handlers.js");
   const guest = await handleAppAction("guest-login", {});

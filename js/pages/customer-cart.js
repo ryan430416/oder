@@ -43,7 +43,7 @@ function paintEmpty() {
   setCheckoutEnabled(false);
 }
 
-function paintItems(cur, store, products, { error = false } = {}) {
+function paintItems(cur, store, products, { error = false, code = "cart_load_failed" } = {}) {
   const livePrices = new Map((products || []).map((product) => [product.product_id, Number(product.price)]));
   let total = 0;
   lines.innerHTML = cur.items
@@ -76,7 +76,7 @@ function paintItems(cur, store, products, { error = false } = {}) {
   setCheckoutEnabled(enabled);
   if (error) {
     renderBackendNotice(statusEl, {
-      code: "cart_load_failed",
+      code,
       busy: gate.busy,
       onRetry: () => render(),
     });
@@ -106,7 +106,7 @@ async function render() {
     showLoading();
     try {
       const session = await auth.ensureCustomer();
-      if (!session) throw new Error("backend_unavailable");
+      if (!session?.ok) throw new Error("anonymous_login_failed");
       if (!bellMounted) {
         mountBell(qs("#bellHost"), "notifications.html");
         bellMounted = true;
@@ -119,8 +119,11 @@ async function render() {
       lastStore = store;
       lastProducts = productResult.data || [];
       paintItems(cur, lastStore, lastProducts, { error: false });
-    } catch {
-      paintItems(cur, lastStore, lastProducts, { error: true });
+    } catch (error) {
+      paintItems(cur, lastStore, lastProducts, {
+        error: true,
+        code: error?.message === "anonymous_login_failed" ? "anonymous_login_failed" : "cart_load_failed",
+      });
     }
   });
   if (run?.skipped) return;

@@ -5,12 +5,23 @@ const FRIENDLY_CODES = new Set([
   "backend_offline",
   "pocketbase_not_configured",
   "server_not_configured",
+  "anonymous_login_failed",
   "stores_load_failed",
   "cart_load_failed",
+  "permission_denied",
 ]);
 
 export function friendlyErrorCode(code) {
   return FRIENDLY_CODES.has(code) ? code : "backend_error";
+}
+
+export async function withRetryLock(button, task) {
+  if (button) button.disabled = true;
+  try {
+    await task?.();
+  } finally {
+    if (button && (button.isConnected !== false)) button.disabled = false;
+  }
 }
 
 export function renderBackendNotice(host, { code, onRetry, busy = false } = {}) {
@@ -28,7 +39,7 @@ export function renderBackendNotice(host, { code, onRetry, busy = false } = {}) 
   button.disabled = Boolean(busy);
   button.addEventListener("click", () => {
     if (button.disabled) return;
-    onRetry?.();
+    Promise.resolve(withRetryLock(button, onRetry)).catch(() => {});
   });
   host.append(text, button);
   return button;

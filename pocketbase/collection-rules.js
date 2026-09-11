@@ -8,10 +8,12 @@ export const COLLECTION_RULES = {
   oder_users: {
     listRule: `${ACTIVE} && (id = @request.auth.id || @request.auth.role = "admin")`,
     viewRule: `${ACTIVE} && (id = @request.auth.id || @request.auth.role = "admin")`,
-    createRule: null,
-    updateRule: ADMIN,
+    createRule:
+      '@request.auth.id = "" && role = "customer" && status = "active" && (@request.body.store:isset = false || store = "")',
+    updateRule: `${ADMIN} || (${CUSTOMER} && id = @request.auth.id && @request.body.role:isset = false && @request.body.status:isset = false && @request.body.store:isset = false)`,
     deleteRule: null,
     manageRule: ADMIN,
+    authRule: 'status = "active"',
   },
   stores: {
     listRule: `status = "open" || (${ADMIN}) || (${STORE} && id = @request.auth.store)`,

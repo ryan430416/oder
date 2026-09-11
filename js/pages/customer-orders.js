@@ -7,19 +7,25 @@ import { mountBell } from "../notify-ui.js";
 import { ORDER_FILTERS, watchOrders } from "../order-filters.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { canCustomerCancel } from "../order-status.js";
+import { createInflight } from "../ui-state.js";
+import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
+import { shouldQueryCustomerData } from "../guest-session.js";
 
 initI18n();
-const session = await auth.ensureCustomer();
-if (!session) throw new Error("backend_unavailable");
-mountBell(qs("#bellHost"), "notifications.html");
 
-let filter = "all";
 const tabs = qs("#tabs");
 const list = qs("#list");
 const day = qs("#day");
+const statusEl = qs("#ordersStatus");
+const gate = createInflight();
+let session = null;
+let realtimeStarted = false;
+let filter = "all";
+
 const realtimeStatus = document.createElement("p");
 realtimeStatus.className = "muted realtime-status";
 tabs.before(realtimeStatus);
+
 const createdOrder = new URLSearchParams(location.search).get("created");
 if (createdOrder) {
   const notice = document.createElement("p");
@@ -54,6 +60,10 @@ function drawTabs() {
 }
 
 async function render() {
+  if (!session) {
+    list.innerHTML = "";
+    return;
+  }
   const orders = await api.getCustomerOrders(session.user_id);
   const rows = orders.filter(match);
   if (!rows.length) {
@@ -85,28 +95,54 @@ async function render() {
   list.innerHTML = html;
 }
 
+async function boot() {
+  const run = await gate.run(async () => {
+    list.innerHTML = "";
+    const result = await auth.ensureCustomer();
+    if (!shouldQueryCustomerData(result)) {
+      session = null;
+      renderBackendNotice(statusEl, {
+        code: result?.code || "anonymous_login_failed",
+        busy: gate.busy,
+        onRetry: () => boot(),
+      });
+      return;
+    }
+    session = result.session;
+    hideBackendNotice(statusEl);
+    mountBell(qs("#bellHost"), "notifications.html");
+    drawTabs();
+    await render();
+    if (!realtimeStarted) {
+      realtimeStarted = true;
+      watchOrders(render, (status) => {
+        realtimeStatus.textContent = t(`realtime_${status}`);
+      });
+      setInterval(render, 5000);
+    }
+  });
+  if (run?.skipped) return;
+}
+
 tabs.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-f]");
-  if (!btn) return;
+  if (!btn || !session) return;
   filter = btn.dataset.f;
   drawTabs();
   render();
 });
 
-day.addEventListener("change", render);
+day.addEventListener("change", () => {
+  if (session) render();
+});
 
 list.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-cancel]");
-  if (!btn) return;
+  if (!btn || !session) return;
   if (!confirm(t("cancel_confirm"))) return;
   const res = await api.cancelOrder(btn.dataset.cancel);
   if (!res.ok) alert(t(res.code || "cannot_cancel"));
   render();
 });
 
-drawTabs();
-render();
-watchOrders(render, (status) => {
-  realtimeStatus.textContent = t(`realtime_${status}`);
-});
-setInterval(render, 5000);
+boot();

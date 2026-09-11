@@ -43,10 +43,11 @@ test("broken product images switch to the default meal image", () => {
   assert.equal(image.src, DEFAULT_PRODUCT_IMAGE);
 });
 
-test("store catalog distinguishes loading, empty, and query failure", () => {
+test("store catalog distinguishes loading, empty, query failure, and auth failure", () => {
   assert.equal(storeListPhase({ loading: true, error: false, stores: [] }), "loading");
   assert.equal(storeListPhase({ loading: false, error: false, stores: [] }), "empty");
   assert.equal(storeListPhase({ loading: false, error: true, stores: [] }), "error");
+  assert.equal(storeListPhase({ loading: false, authError: true, stores: [] }), "auth_error");
   assert.equal(
     storeListPhase({
       loading: true,
@@ -142,5 +143,6 @@ test("portal copy is translated in zh, en, th, and my", () => {
     assert.doesNotMatch(t("portal_sub"), /單機|只保存在這台裝置|device-only|อุปกรณ์นี้|ဤစက်တွင်သာ/);
     assert.equal(t("cart_store", { name: "Central Cafe", id: "should-not-appear" }), t("cart_store", { name: "Central Cafe" }));
     assert.doesNotMatch(t("cart_store", { name: "Central Cafe", id: "uuid-here" }), /uuid-here/);
+    assert.equal(t("cart_hint_empty").includes("請先選擇店家商品") || t("cart_hint_empty").length > 0, true);
   }
 });

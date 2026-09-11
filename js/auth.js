@@ -1,5 +1,6 @@
 import { AUTH_COLLECTION } from "./collections.js";
 import { appSend, authRecord, getPocketBase } from "./pocketbase.js";
+import { loginAsGuest } from "./guest-session.js";
 import { pageHref } from "./nav.js";
 
 const PROFILE_KEY = "campus_order_profile";
@@ -104,17 +105,16 @@ export const auth = {
   },
 
   async ensureCustomer() {
-    let current = await this.restoreSession();
-    if (current) return current;
     try {
+      const restored = await this.restoreSession();
+      if (restored) return { ok: true, session: restored, reused: true };
       const client = await getPocketBase();
-      const guest = await appSend("/api/app/guest-login");
-      if (!guest?.token || !guest?.record) throw new Error("anonymous_login_failed");
-      client.authStore.save(guest.token, guest.record);
-      return loadProfileFromRecord(guest.record);
+      const result = await loginAsGuest(client);
+      if (!result.ok || !result.session) return { ok: false, code: "anonymous_login_failed" };
+      return { ok: true, session: loadProfileFromRecord(result.session), reused: result.reused };
     } catch (error) {
-      console.error("Customer session failed", error);
-      return null;
+      console.error("Customer session failed", error?.status || error?.message || error);
+      return { ok: false, code: error?.message === "backend_unavailable" ? "pocketbase_not_configured" : "anonymous_login_failed" };
     }
   },
 
@@ -124,17 +124,33 @@ export const auth = {
     if (!displayName) return { ok: false, code: "need_name" };
     if (!gradeValue) return { ok: false, code: "need_grade" };
     if (!CUSTOMER_GRADES.has(gradeValue)) return { ok: false, code: "invalid_grade" };
-    const result = await appSend("/api/app/update-profile", {
-      display_name: displayName,
-      grade: gradeValue,
-    });
-    if (!result?.ok) return result;
-    const session = writeProfile({
-      ...readProfile(),
-      name: result.profile?.display_name || displayName,
-      grade: result.profile?.grade || gradeValue,
-    });
-    return { ok: true, session };
+    try {
+      const client = await getPocketBase();
+      const record = authRecord(client);
+      if (!record?.id) return { ok: false, code: "session_expired" };
+      const profile = await client.collection(AUTH_COLLECTION).update(record.id, {
+        display_name: displayName,
+        grade: gradeValue,
+      });
+      const session = writeProfile({
+        ...readProfile(),
+        name: profile.display_name || displayName,
+        grade: profile.grade || gradeValue,
+      });
+      return { ok: true, session };
+    } catch (error) {
+      const fallback = await appSend("/api/app/update-profile", {
+        display_name: displayName,
+        grade: gradeValue,
+      });
+      if (!fallback?.ok) return { ok: false, code: fallback?.code || "backend_error" };
+      const session = writeProfile({
+        ...readProfile(),
+        name: fallback.profile?.display_name || displayName,
+        grade: fallback.profile?.grade || gradeValue,
+      });
+      return { ok: true, session };
+    }
   },
 };
 
