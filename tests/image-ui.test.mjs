@@ -74,6 +74,15 @@ test("lightbox does not keep a dormant empty-src img", async () => {
   assert.match(source, /Escape/);
   assert.match(source, /closeButton\.focus/);
   assert.match(source, /aria-label/);
+  assert.match(source, /role", "dialog"/);
+  assert.match(source, /aria-modal", "true"/);
+  assert.match(source, /lastFocus = trigger/);
+  assert.match(source, /inert/);
+});
+
+test("category buttons expose aria-pressed in customer store", async () => {
+  const source = await readFile(new URL("../js/pages/customer-store.js", import.meta.url), "utf8");
+  assert.match(source, /aria-pressed="\$\{pressed \? "true" : "false"\}"/);
 });
 
 test("seed meal image is at least 400px and not 128", async () => {

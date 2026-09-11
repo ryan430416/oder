@@ -213,6 +213,38 @@ test("cart enforces one store and quantity 1 to 99", async () => {
   assert.equal(cart.get().items[0].quantity, 99);
 });
 
+test("cart remove at qty 1 only happens when confirmed and updates total", async () => {
+  const values = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, String(value)),
+    removeItem: (key) => values.delete(key),
+  };
+  const { cart } = await import(`../js/cart.js?remove=${Date.now()}`);
+  const { planQtyButtonAction } = await import(`../js/quantity.js?remove=${Date.now()}`);
+  const product = {
+    product_id: "p1",
+    store_id: "s1",
+    product_name: "Meal",
+    price: 75,
+    status: "active",
+  };
+  assert.equal(cart.add(product, 1).ok, true);
+  assert.equal(cart.total(), 75);
+
+  const cancel = planQtyButtonAction(1, -1, { confirmed: false });
+  assert.equal(cancel.type, "noop");
+  assert.equal(cart.count(), 1);
+  assert.equal(cart.total(), 75);
+
+  const ok = planQtyButtonAction(1, -1, { confirmed: true });
+  assert.equal(ok.type, "remove");
+  cart.remove("p1");
+  assert.equal(cart.count(), 0);
+  assert.equal(cart.total(), 0);
+  assert.equal(JSON.parse(values.get("campus_order_cart")).items.length, 0);
+});
+
 test("campus time converts Bangkok wall clock without device timezone", () => {
   const slot = atCampus("2026-09-11", "17:15");
   assert.equal(slot.toISOString(), "2026-09-11T10:15:00.000Z");

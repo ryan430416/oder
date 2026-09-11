@@ -8,7 +8,7 @@ import { mountBell } from "../notify-ui.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { cartCheckoutEnabled, cartTotalDisplay, createInflight } from "../ui-state.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
-import { parseCartQuantity, QTY_MAX, QTY_MIN } from "../quantity.js";
+import { parseCartQuantity, planQtyButtonAction, QTY_MAX, QTY_MIN } from "../quantity.js";
 
 initI18n();
 
@@ -223,8 +223,12 @@ lines.addEventListener("click", (e) => {
   const item = cart.get().items.find((i) => i.product_id === btn.dataset.id);
   if (!item) return;
   const delta = Number(btn.dataset.d);
-  if (delta === -1 && item.quantity <= QTY_MIN) {
-    if (!window.confirm(t("cart_remove_confirm"))) return;
+  const needsConfirm = delta === -1 && item.quantity <= QTY_MIN;
+  const confirmed = needsConfirm ? window.confirm(t("cart_remove_confirm")) : false;
+  if (needsConfirm && !confirmed) return;
+  const action = planQtyButtonAction(item.quantity, delta, { confirmed });
+  if (action.type === "noop") return;
+  if (action.type === "remove") {
     cart.remove(btn.dataset.id);
     const cur = cart.get();
     if (!cur.items.length) {
@@ -234,8 +238,7 @@ lines.addEventListener("click", (e) => {
     paintItems(cur, lastStore, lastProducts, { error: lastError, code: lastErrorCode });
     return;
   }
-  const next = item.quantity + delta;
-  const result = cart.setQty(btn.dataset.id, next);
+  const result = cart.setQty(btn.dataset.id, action.quantity);
   if (!result.ok) return;
   syncLinesFromCart();
 });

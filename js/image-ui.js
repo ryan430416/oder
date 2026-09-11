@@ -32,6 +32,17 @@ function inspectLoadedPhoto(image) {
   }
 }
 
+function setDialogClosedState(dialog) {
+  dialog.setAttribute("aria-hidden", "true");
+  if ("inert" in dialog) dialog.inert = true;
+}
+
+function setDialogOpenState(dialog, label) {
+  dialog.setAttribute("aria-hidden", "false");
+  if ("inert" in dialog) dialog.inert = false;
+  dialog.setAttribute("aria-label", label);
+}
+
 export function mountImageUi(root = document) {
   root.querySelectorAll("img.product-photo").forEach((image) => {
     if (image.dataset.imageReady) return;
@@ -53,7 +64,10 @@ export function mountImageUi(root = document) {
   document.body.dataset.imageLightbox = "1";
   const dialog = document.createElement("dialog");
   dialog.className = "image-lightbox";
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
   dialog.setAttribute("aria-label", t("product_photo_alt"));
+  setDialogClosedState(dialog);
   const closeButton = document.createElement("button");
   closeButton.className = "btn";
   closeButton.type = "button";
@@ -76,6 +90,7 @@ export function mountImageUi(root = document) {
 
   const closeDialog = () => {
     clearLightboxImage();
+    setDialogClosedState(dialog);
     if (dialog.open) dialog.close();
     const restore = lastFocus;
     lastFocus = null;
@@ -96,7 +111,10 @@ export function mountImageUi(root = document) {
     event.preventDefault();
     closeDialog();
   });
-  dialog.addEventListener("close", () => clearLightboxImage());
+  dialog.addEventListener("close", () => {
+    clearLightboxImage();
+    setDialogClosedState(dialog);
+  });
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && dialog.open) closeDialog();
@@ -109,12 +127,14 @@ export function mountImageUi(root = document) {
     if (!src) return;
     event.preventDefault();
     clearLightboxImage();
+    const label = trigger.getAttribute("aria-label") || t("product_photo_alt");
     preview = document.createElement("img");
-    preview.alt = trigger.getAttribute("aria-label") || t("product_photo_alt");
+    preview.alt = label;
     preview.src = src;
     preview.onerror = () => closeDialog();
     dialog.append(preview);
-    lastFocus = document.activeElement;
+    lastFocus = trigger;
+    setDialogOpenState(dialog, label);
     dialog.showModal();
     closeButton.focus();
   });

@@ -219,7 +219,7 @@ const dict = {
     close_preview: "關閉圖片預覽",
     qty_decrease: "減少數量",
     qty_increase: "增加數量",
-    cart_remove_confirm: "要從購物車移除此商品嗎？",
+    cart_remove_confirm: "是否移除此商品？",
     school_pickup_admin_note: "取餐時段由全校統一設定，無法替個別店家更改。目前時段：{windows}",
     remove_photo: "移除圖片",
     image_ready: "圖片已驗證，儲存時將自動壓縮上傳",

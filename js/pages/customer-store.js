@@ -55,7 +55,8 @@ async function boot() {
       catsEl.innerHTML = cats
         .map((c) => {
           const label = c === ALL ? t("cat_all") : categoryLabel(c);
-          return `<button type="button" data-cat="${escapeAttr(c)}" class="${c === cat ? "on" : ""}">${escapeHtml(label)}</button>`;
+          const pressed = c === cat;
+          return `<button type="button" data-cat="${escapeAttr(c)}" class="${pressed ? "on" : ""}" aria-pressed="${pressed ? "true" : "false"}">${escapeHtml(label)}</button>`;
         })
         .join("");
     }

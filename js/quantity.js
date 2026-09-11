@@ -47,3 +47,21 @@ export function parseOrderQuantity(raw) {
   }
   return null;
 }
+
+/**
+ * Decide how a cart +/- button should behave.
+ * At quantity 1, decrease never removes unless `confirmed` is true.
+ */
+export function planQtyButtonAction(quantity, delta, { confirmed = false } = {}) {
+  const qty = Number(quantity);
+  const step = Number(delta);
+  if (!Number.isInteger(qty) || !Number.isInteger(step) || step === 0) {
+    return { type: "noop" };
+  }
+  if (step < 0 && qty <= QTY_MIN) {
+    return confirmed ? { type: "remove" } : { type: "noop" };
+  }
+  const next = Math.min(QTY_MAX, Math.max(QTY_MIN, qty + step));
+  if (next === qty) return { type: "noop" };
+  return { type: "set", quantity: next };
+}

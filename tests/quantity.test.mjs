@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseCartQuantity, parseOrderQuantity, QTY_MAX, QTY_MIN } from "../js/quantity.js";
+import {
+  parseCartQuantity,
+  parseOrderQuantity,
+  planQtyButtonAction,
+  QTY_MAX,
+  QTY_MIN,
+} from "../js/quantity.js";
 
 test("parseCartQuantity clamps 0 and 100 and keeps 1–99", () => {
   assert.deepEqual(parseCartQuantity("0"), { ok: true, value: 1, clamped: true });
@@ -35,4 +41,12 @@ test("parseOrderQuantity rejects out-of-range and non-integers without clamping"
   assert.equal(parseOrderQuantity("1e2"), null);
   assert.equal(parseOrderQuantity(" 42 "), 42);
   assert.equal(parseOrderQuantity(""), null);
+});
+
+test("decrease at quantity 1 is noop unless confirmed remove", () => {
+  assert.deepEqual(planQtyButtonAction(1, -1, { confirmed: false }), { type: "noop" });
+  assert.deepEqual(planQtyButtonAction(1, -1, { confirmed: true }), { type: "remove" });
+  assert.deepEqual(planQtyButtonAction(2, -1), { type: "set", quantity: 1 });
+  assert.deepEqual(planQtyButtonAction(99, 1), { type: "noop" });
+  assert.deepEqual(planQtyButtonAction(98, 1), { type: "set", quantity: 99 });
 });
