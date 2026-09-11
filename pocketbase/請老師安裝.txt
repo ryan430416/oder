@@ -3,9 +3,9 @@
 請不要改現有的「使用者、香港學生、學校用戶」等 collections。
 請不要把點餐資料全部塞進空的 DT_oder 那一張表。
 
-點餐表（oder_users、stores、products、orders、order_items、notifications、reviews）已建立，不必重做。
+點餐表（oder_users、stores、products、orders、order_items、notifications、reviews、admin_audit_logs）已建立，不必重做。
 
-正式網站的訪客登入與下單走 Vercel /api/app/*，不需要把 pb_hooks 放到學校主機。
+正式網站的訪客登入、下單、管理員刪除／停用店家，走 Vercel /api/app/*，不需要把 pb_hooks 放到學校主機。
 若本機用 pb:serve 測試，再把 pb_hooks、pb_migrations 放在 PocketBase 程式旁邊即可。
 
 oder_users 測試管理員為 admin@campus-order.test，網站登入是 admin / 1234（不是 PocketBase 後台 Superuser）。
