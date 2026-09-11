@@ -6,6 +6,8 @@ import { mountIconPick } from "../easy-pick.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { mountPasswordToggles } from "../password-toggle.js";
 import { schoolPickupWindowsLabel } from "../service-periods.js";
+import { canPermanentlyDeleteStore } from "../admin-data.js";
+import { createInflight } from "../ui-state.js";
 
 if (!(await bootAdmin())) throw new Error("admin");
 mountPasswordToggles();
@@ -18,6 +20,7 @@ const submitBtn = qs("#submitBtn");
 const cancelBtn = qs("#cancelEdit");
 const iconPick = qs("#iconPick");
 const pickupNote = qs("#schoolPickupNote");
+const gate = createInflight();
 
 mountIconPick(iconPick, { name: "image", value: "🏪" });
 if (pickupNote) {
@@ -46,6 +49,12 @@ async function loadStores() {
   return result.ok ? result.data || [] : [];
 }
 
+function statusBadge(status) {
+  if (status === "open") return `<span class="badge">${t("open")}</span>`;
+  if (status === "disabled") return `<span class="badge off">${t("store_disabled")}</span>`;
+  return `<span class="badge off">${t("closed")}</span>`;
+}
+
 async function render() {
   const resets = await api.getPasswordResets();
   const stores = await loadStores();
@@ -57,7 +66,7 @@ async function render() {
   list.innerHTML = stores
     .map((s) => {
       const lab = storeLabel(s);
-      const open = s.status === "open";
+      const active = s.status === "open";
       return `
       <article class="card">
         <strong>${escapeHtml(s.image || "🏪")} ${escapeHtml(lab.name)}</strong>
@@ -65,12 +74,12 @@ async function render() {
         ${resetIds.has(s.store_id) ? `<div class="badge off">${t("pending_reset")}</div>` : ""}
         <div class="muted">${escapeHtml(lab.desc)}</div>
         <div class="muted">${escapeHtml(schoolPickupWindowsLabel())}</div>
-        <span class="badge ${open ? "" : "off"}">${open ? t("open") : t("closed")}</span>
+        ${statusBadge(s.status)}
         <div class="row-actions">
           <button class="btn btn-ghost" type="button" data-edit="${escapeAttr(s.store_id)}">${escapeHtml(t("edit"))}</button>
           <a class="btn btn-ghost" href="products.html?store_id=${encodeURIComponent(s.store_id)}">${t("go_products")}</a>
-          <button class="btn ${open ? "btn-danger" : ""}" type="button" data-toggle="${escapeAttr(s.store_id)}">${
-            open ? t("disable_store") : t("enable_store")
+          <button class="btn ${active ? "btn-danger" : ""}" type="button" data-toggle="${escapeAttr(s.store_id)}">${
+            active ? t("disable_store") : t("enable_store")
           }</button>
           <button class="btn btn-danger" type="button" data-del="${escapeAttr(s.store_id)}">${escapeHtml(t("delete"))}</button>
         </div>
@@ -164,27 +173,59 @@ list.addEventListener("click", async (e) => {
   if (tog) {
     const s = stores.find((x) => x.store_id === tog.dataset.toggle);
     if (!s) return;
-    await api.updateStore(s.store_id, { status: s.status === "open" ? "closed" : "open" });
-    render();
+    const run = await gate.run(async () => {
+      tog.disabled = true;
+      tog.textContent = t("working");
+      const next = s.status === "open" ? "disabled" : "open";
+      const res =
+        next === "disabled" ? await api.disableStore(s.store_id) : await api.enableStore(s.store_id);
+      msg.textContent = res.ok ? t("saved_ok") : t(res.code || "backend_error");
+      await render();
+    });
+    if (run?.skipped) return;
   }
   if (del) {
     const s = stores.find((x) => x.store_id === del.dataset.del);
     if (!s) return;
-    const impact = await api.getStoreImpact(s.store_id);
-    if (
-      !confirm(
-        t("confirm_delete_store_impact", {
-          name: storeLabel(s).name,
-          products: impact.products,
-          orders: impact.orders,
-          users: impact.users,
-        })
-      )
-    ) return;
-    const res = await api.deleteStore(s.store_id);
-    msg.textContent = res.ok ? t("deleted_ok") : t(res.code);
-    if (res.ok && form.store_id.value === s.store_id) setCreateMode();
-    render();
+    const run = await gate.run(async () => {
+      del.disabled = true;
+      const impact = await api.getStoreImpact(s.store_id);
+      if (!impact.ok) {
+        msg.textContent = t(impact.code || "backend_error");
+        del.disabled = false;
+        return;
+      }
+      if (!canPermanentlyDeleteStore(impact)) {
+        msg.textContent = t("store_has_orders");
+        if (confirm(t("confirm_disable_store_history", { name: storeLabel(s).name }))) {
+          const res = await api.disableStore(s.store_id);
+          msg.textContent = res.ok ? t("saved_ok") : t(res.code || "backend_error");
+          await render();
+        } else {
+          del.disabled = false;
+        }
+        return;
+      }
+      if (
+        !confirm(
+          t("confirm_delete_store_safe", {
+            name: storeLabel(s).name,
+            products: impact.products,
+            images: impact.images,
+            users: impact.users,
+          })
+        )
+      ) {
+        del.disabled = false;
+        return;
+      }
+      del.textContent = t("working");
+      const res = await api.deleteStore(s.store_id);
+      msg.textContent = res.ok ? t("deleted_ok") : t(res.code || "store_delete_failed");
+      if (res.ok && form.store_id.value === s.store_id) setCreateMode();
+      await render();
+    });
+    if (run?.skipped) return;
   }
 });
 

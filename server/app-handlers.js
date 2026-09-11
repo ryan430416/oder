@@ -1,7 +1,15 @@
 import { randomBytes } from "node:crypto";
 import { canCustomerCancel, canTransition } from "../js/order-status.js";
-import { campusDateTimeParts } from "../js/campus-time.js";
+import { campusDateKey, campusDateTimeParts } from "../js/campus-time.js";
 import { parseOrderQuantity } from "../js/quantity.js";
+import {
+  canPermanentlyDeleteStore,
+  pocketBaseCreatedRangeFilter,
+  sanitizeAdminUser,
+  statusDistribution,
+  sumTrustedRevenue,
+  topKeyedCount,
+} from "../js/admin-data.js";
 import {
   adminConfigured,
   authFromHeader,
@@ -120,6 +128,16 @@ export async function handleAppAction(action, { body = {}, authorization = "" } 
       return deleteProduct(authorization, body);
     case "delete-store":
       return deleteStore(authorization, body);
+    case "disable-store":
+      return disableStore(authorization, body);
+    case "enable-store":
+      return enableStore(authorization, body);
+    case "admin-users":
+      return adminUsers(authorization);
+    case "admin-orders":
+      return adminOrders(authorization);
+    case "admin-stats":
+      return adminStats(authorization);
     case "mark-notification-read":
       return markNotificationRead(authorization, body);
     case "create-store-account":
@@ -324,6 +342,47 @@ async function deleteProduct(authorization, body) {
   return ok({ deleted: true, image_path: imageName || "" });
 }
 
+async function writeAudit(actor, payload) {
+  try {
+    await createRecord("admin_audit_logs", {
+      actor_id: String(actor?.id || ""),
+      actor_role: String(actor?.role || ""),
+      store_id: String(payload.store_id || ""),
+      store_name: String(payload.store_name || "").slice(0, 120),
+      action: String(payload.action || ""),
+      result: String(payload.result || ""),
+      reason: String(payload.reason || "").slice(0, 300),
+      impact_json: JSON.stringify(payload.impact || {}),
+    });
+  } catch (error) {
+    console.error("audit_log_failed", error?.message || error);
+  }
+}
+
+async function countImpact(storeId) {
+  const [products, orders, users, notifications, reviews] = await Promise.all([
+    findAll("products", `store="${storeId}"`),
+    findAll("orders", `store="${storeId}"`),
+    findAll(AUTH, `store="${storeId}"`),
+    findAll("notifications", `store="${storeId}"`),
+    findAll("reviews", `store="${storeId}"`),
+  ]);
+  const images = products.filter((row) => row.image).length;
+  return {
+    products: products.length,
+    orders: orders.length,
+    users: users.length,
+    notifications: notifications.length,
+    reviews: reviews.length,
+    images,
+    productRows: products,
+    orderRows: orders,
+    userRows: users,
+    notificationRows: notifications,
+    reviewRows: reviews,
+  };
+}
+
 async function deleteStore(authorization, body) {
   const { auth, error } = await requireUser(authorization);
   if (error) return error;
@@ -331,16 +390,212 @@ async function deleteStore(authorization, body) {
   const storeId = String(body.store_id || "");
   const store = await findById("stores", storeId);
   if (!store) return fail("no_store");
-  const storeUsers = await findAll(AUTH, `store="${storeId}"`);
-  for (const user of storeUsers) {
-    await updateRecord(AUTH, user.id, { role: "customer", status: "disabled", store: "" });
+  const impact = await countImpact(storeId);
+  if (!canPermanentlyDeleteStore(impact)) {
+    await writeAudit(auth.record, {
+      store_id: storeId,
+      store_name: store.name,
+      action: "delete_store",
+      result: "denied",
+      reason: "store_has_orders",
+      impact: {
+        products: impact.products,
+        orders: impact.orders,
+        users: impact.users,
+        images: impact.images,
+      },
+    });
+    return fail("store_has_orders");
   }
-  const orders = await findAll("orders", `store="${storeId}"`);
-  for (const order of orders) await deleteRecord("orders", order.id);
-  const products = await findAll("products", `store="${storeId}"`);
-  for (const product of products) await deleteRecord("products", product.id);
-  await deleteRecord("stores", storeId);
-  return ok({ deleted: true, orders: orders.length, products: products.length });
+  try {
+    for (const user of impact.userRows) {
+      await updateRecord(AUTH, user.id, { role: "customer", status: "disabled", store: "" });
+    }
+    for (const row of impact.notificationRows) await deleteRecord("notifications", row.id);
+    for (const row of impact.reviewRows) await deleteRecord("reviews", row.id);
+    for (const product of impact.productRows) await deleteRecord("products", product.id);
+    await deleteRecord("stores", storeId);
+    await writeAudit(auth.record, {
+      store_id: storeId,
+      store_name: store.name,
+      action: "delete_store",
+      result: "ok",
+      reason: "",
+      impact: {
+        products: impact.products,
+        orders: 0,
+        users: impact.users,
+        images: impact.images,
+        notifications: impact.notifications,
+        reviews: impact.reviews,
+      },
+    });
+    return ok({
+      deleted: true,
+      products: impact.products,
+      users: impact.users,
+      images: impact.images,
+    });
+  } catch (err) {
+    await writeAudit(auth.record, {
+      store_id: storeId,
+      store_name: store.name,
+      action: "delete_store",
+      result: "error",
+      reason: String(err?.message || "backend_error").slice(0, 300),
+      impact: {
+        products: impact.products,
+        orders: impact.orders,
+        users: impact.users,
+        images: impact.images,
+      },
+    });
+    return fail("store_delete_failed");
+  }
+}
+
+async function disableStore(authorization, body) {
+  const { auth, error } = await requireUser(authorization);
+  if (error) return error;
+  if (!isAdmin(auth.record)) return fail("not_admin");
+  const storeId = String(body.store_id || "");
+  const store = await findById("stores", storeId);
+  if (!store) return fail("no_store");
+  try {
+    await updateRecord("stores", storeId, { status: "disabled" });
+    const users = await findAll(AUTH, `store="${storeId}" && role="store"`);
+    for (const user of users) {
+      await updateRecord(AUTH, user.id, { status: "disabled" });
+    }
+    await writeAudit(auth.record, {
+      store_id: storeId,
+      store_name: store.name,
+      action: "disable_store",
+      result: "ok",
+      reason: "",
+      impact: { users: users.length, orders: "preserved" },
+    });
+    return ok({ disabled: true, store_id: storeId });
+  } catch (err) {
+    await writeAudit(auth.record, {
+      store_id: storeId,
+      store_name: store.name,
+      action: "disable_store",
+      result: "error",
+      reason: String(err?.message || "backend_error").slice(0, 300),
+      impact: {},
+    });
+    return fail("backend_error");
+  }
+}
+
+async function enableStore(authorization, body) {
+  const { auth, error } = await requireUser(authorization);
+  if (error) return error;
+  if (!isAdmin(auth.record)) return fail("not_admin");
+  const storeId = String(body.store_id || "");
+  const store = await findById("stores", storeId);
+  if (!store) return fail("no_store");
+  try {
+    await updateRecord("stores", storeId, { status: "open" });
+    const users = await findAll(AUTH, `store="${storeId}" && role="store"`);
+    for (const user of users) {
+      await updateRecord(AUTH, user.id, { status: "active" });
+    }
+    await writeAudit(auth.record, {
+      store_id: storeId,
+      store_name: store.name,
+      action: "enable_store",
+      result: "ok",
+      reason: "",
+      impact: { users: users.length },
+    });
+    return ok({ enabled: true, store_id: storeId, users: users.length });
+  } catch (err) {
+    await writeAudit(auth.record, {
+      store_id: storeId,
+      store_name: store.name,
+      action: "enable_store",
+      result: "error",
+      reason: String(err?.message || "backend_error").slice(0, 300),
+      impact: {},
+    });
+    return fail("backend_error");
+  }
+}
+
+async function adminUsers(authorization) {
+  const { auth, error } = await requireUser(authorization);
+  if (error) return error;
+  if (!isAdmin(auth.record)) return fail("not_admin");
+  const rows = await findAll(AUTH, "");
+  return ok({ users: rows.map(sanitizeAdminUser).filter(Boolean) });
+}
+
+async function adminOrders(authorization) {
+  const { auth, error } = await requireUser(authorization);
+  if (error) return error;
+  if (!isAdmin(auth.record)) return fail("not_admin");
+  const orders = await findAll("orders", "");
+  const items = await findAll("order_items", "");
+  const byOrder = new Map();
+  items.forEach((item) => {
+    const list = byOrder.get(item.order) || [];
+    list.push(item);
+    byOrder.set(item.order, list);
+  });
+  const mapped = orders
+    .sort((a, b) => String(b.created || "").localeCompare(String(a.created || "")))
+    .map((order) => ({
+      ...order,
+      items: byOrder.get(order.id) || [],
+    }));
+  return ok({ orders: mapped });
+}
+
+async function adminStats(authorization) {
+  const { auth, error } = await requireUser(authorization);
+  if (error) return error;
+  if (!isAdmin(auth.record)) return fail("not_admin");
+  const dayKey = campusDateKey();
+  const todayFilter = pocketBaseCreatedRangeFilter(dayKey);
+  const [stores, products, allOrders, todayOrders, todayItems] = await Promise.all([
+    findAll("stores", ""),
+    findAll("products", ""),
+    findAll("orders", ""),
+    findAll("orders", todayFilter),
+    findAll("order_items", ""),
+  ]);
+  const todayIds = new Set(todayOrders.map((row) => row.id));
+  const rows = todayOrders.map((order) => ({
+    ...order,
+    items: todayItems.filter((item) => item.order === order.id),
+  }));
+  const storeCounts = new Map();
+  const productCounts = new Map();
+  rows.forEach((order) => {
+    if (order.status === "cancelled" || order.status === "rejected") return;
+    storeCounts.set(order.store, (storeCounts.get(order.store) || 0) + 1);
+    (order.items || []).forEach((item) => {
+      const name = item.product_name_snapshot || "";
+      if (!name) return;
+      productCounts.set(name, (productCounts.get(name) || 0) + Number(item.quantity || 0));
+    });
+  });
+  return ok({
+    stats: {
+      stores: stores.length,
+      products: products.length,
+      orders: allOrders.length,
+      today: rows.length,
+      revenue: sumTrustedRevenue(rows),
+      topProduct: topKeyedCount(productCounts.entries()),
+      topStoreId: topKeyedCount(storeCounts.entries()),
+      statusCounts: statusDistribution(rows),
+      dateKey: dayKey,
+      todayOrderIds: [...todayIds],
+    },
+  });
 }
 
 async function markNotificationRead(authorization, body) {

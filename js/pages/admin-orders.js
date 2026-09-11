@@ -4,22 +4,27 @@ import { qs } from "../nav.js";
 import { t, statusLabel, productLabel, storeLabel, gradeLabel } from "../i18n.js";
 import { bootAdmin } from "../admin-boot.js";
 import { escapeAttr, escapeHtml } from "../html.js";
+import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
+import { watchOrders } from "../order-filters.js";
+import { campusDateKey } from "../campus-time.js";
 
 if (!(await bootAdmin())) throw new Error("admin");
 
-const storesResult = await api.getStores();
-const stores = storesResult.ok ? storesResult.data || [] : [];
 const list = qs("#list");
 const day = qs("#day");
+const statusEl = qs("#ordersStatus");
+const liveEl = qs("#ordersLive");
+let stores = [];
+let cachedOrders = [];
+let hasLoaded = false;
+let loading = false;
 
 function sname(id) {
   const s = stores.find((x) => x.store_id === id);
-  return s ? `${storeLabel(s).name} (${id})` : id;
+  return s ? `${storeLabel(s).name}` : id || "—";
 }
 
-async function render() {
-  let orders = await api.getAdminOrders();
-  if (day.value) orders = orders.filter((o) => dateKey(o.created_at) === day.value);
+function paintOrders(orders) {
   if (!orders.length) {
     list.innerHTML = `<p class="empty">${t("no_orders")}</p>`;
     return;
@@ -43,24 +48,93 @@ async function render() {
       <div class="muted">${escapeHtml(t("cust_label", { name: o.customer_name || "—" }))}</div>
       <div class="muted">${escapeHtml(t("grade_label", { grade: gradeLabel(o.customer_grade) }))}</div>
       <div class="muted">${escapeHtml(t("pickup_at", { time: formatTime(o.pickup_time), amount: money(o.total) }))}</div>
+      <div class="muted">${escapeHtml(t("created_at_label", { time: formatTime(o.created_at) }))}</div>
       <ul class="item-list">${(o.items || [])
-        .map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}</li>`)
+        .map(
+          (i) =>
+            `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}　${money(
+              (i.unit_price || 0) * (i.quantity || 0)
+            )}</li>`
+        )
         .join("")}</ul>
+      <div><strong>${escapeHtml(t("total"))} ${money(o.total)}</strong></div>
       ${can ? `<div class="row-actions"><button class="btn btn-danger" type="button" data-cancel="${escapeAttr(o.order_id)}">${escapeHtml(t("cancel_order"))}</button></div>` : ""}
     </article>`;
   });
   list.innerHTML = html;
 }
 
-day.addEventListener("change", render);
+async function render({ keepOnError = true } = {}) {
+  if (loading) return;
+  loading = true;
+  if (!hasLoaded) list.innerHTML = `<div class="card skeleton" aria-hidden="true"></div>`;
+  hideBackendNotice(statusEl);
+  try {
+    const storesResult = await api.getStores();
+    if (storesResult.ok) stores = storesResult.data || [];
+    const result = await api.getAdminOrders();
+    if (!result?.ok) {
+      if (!keepOnError || !hasLoaded) {
+        list.innerHTML = "";
+        cachedOrders = [];
+      }
+      renderBackendNotice(statusEl, {
+        code: "orders_load_failed",
+        onRetry: () => render({ keepOnError: false }),
+      });
+      return;
+    }
+    cachedOrders = result.data || [];
+    hasLoaded = true;
+    let orders = cachedOrders;
+    if (day.value) orders = orders.filter((o) => dateKey(o.created_at) === day.value);
+    paintOrders(orders);
+  } catch (error) {
+    console.error("admin orders render failed", error?.message || error);
+    if (!keepOnError || !hasLoaded) list.innerHTML = "";
+    renderBackendNotice(statusEl, {
+      code: "orders_load_failed",
+      onRetry: () => render({ keepOnError: false }),
+    });
+  } finally {
+    loading = false;
+  }
+}
+
+day.addEventListener("change", () => {
+  if (!hasLoaded) {
+    render();
+    return;
+  }
+  let orders = cachedOrders;
+  if (day.value) orders = orders.filter((o) => dateKey(o.created_at) === day.value);
+  paintOrders(orders);
+});
+
 list.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-cancel]");
   if (!btn) return;
   if (!confirm(t("cancel_confirm"))) return;
   const res = await api.cancelOrder(btn.dataset.cancel);
   if (!res.ok) alert(t(res.code || "cannot_cancel"));
-  render();
+  render({ keepOnError: true });
 });
 
-render();
-setInterval(render, 5000);
+watchOrders(
+  () => render({ keepOnError: true }),
+  (state) => {
+    if (!liveEl) return;
+    liveEl.textContent = t(
+      state === "connected"
+        ? "realtime_connected"
+        : state === "connecting"
+          ? "realtime_connecting"
+          : "realtime_reconnecting"
+    );
+  }
+);
+
+// Default: show all orders (empty date). Bangkok “today” can be selected manually.
+day.value = "";
+day.setAttribute("max", campusDateKey());
+render({ keepOnError: false });

@@ -3,6 +3,15 @@ import { auth } from "./auth.js";
 import { appSend, getPocketBase } from "./pocketbase.js";
 import { LEGACY_STORE_SERVICE_PERIODS, normalizeServicePeriods, servicePeriodBounds } from "./service-periods.js";
 import { normalizeStoreImage } from "./store-image.js";
+import {
+  canPermanentlyDeleteStore,
+  pocketBaseCreatedRangeFilter,
+  sanitizeAdminUser,
+  statusDistribution,
+  sumTrustedRevenue,
+  topKeyedCount,
+} from "./admin-data.js";
+import { campusDateKey } from "./campus-time.js";
 
 function fileName(value) {
   if (Array.isArray(value)) return value[0] || "";
@@ -61,8 +70,19 @@ function normalizeOrder(row) {
 }
 
 function queryFailure(error, fallback = []) {
-  if (error) console.error("PocketBase query failed", error);
+  if (error) {
+    const status = error?.status || error?.response?.status || "";
+    const code = error?.data?.code || error?.response?.data?.code || error?.message || "backend_error";
+    console.error("PocketBase query failed", { status, code });
+  }
   return fallback;
+}
+
+function queryErrorResult(error) {
+  const status = error?.status || error?.response?.status || 0;
+  const code = error?.data?.code || error?.response?.data?.code || "backend_error";
+  console.error("PocketBase query failed", { status, code });
+  return { ok: false, data: [], code: "backend_error", status, errorCode: code };
 }
 
 function productFileUrl(client, row, filename, thumb = "") {
@@ -84,17 +104,25 @@ function withProductUrls(client, rows) {
 
 async function orderQuery(column, value) {
   const client = await getPocketBase();
-  const filter = column && value ? client.filter(`${column} = {:value}`, { value }) : "";
-  const orders = await client.collection("orders").getFullList({ filter, sort: "-created" });
+  const options = { sort: "-created" };
+  if (column && value) options.filter = client.filter(`${column} = {:value}`, { value });
+  const orders = await client.collection("orders").getFullList(options);
   if (!orders.length) return [];
-  const itemsFilter = orders.map((order) => `order = "${order.id}"`).join(" || ");
-  const items = await client.collection("order_items").getFullList({ filter: itemsFilter });
   const byOrder = new Map();
-  items.forEach((item) => {
-    const list = byOrder.get(item.order) || [];
-    list.push(item);
-    byOrder.set(item.order, list);
-  });
+  for (const order of orders) {
+    try {
+      const items = await client.collection("order_items").getFullList({
+        filter: client.filter("order = {:id}", { id: order.id }),
+      });
+      byOrder.set(order.id, items);
+    } catch (error) {
+      console.error("PocketBase query failed", {
+        status: error?.status || "",
+        code: error?.data?.code || error?.message || "order_items",
+      });
+      byOrder.set(order.id, []);
+    }
+  }
   return orders.map((order) => normalizeOrder({ ...order, items: byOrder.get(order.id) || [] }));
 }
 
@@ -152,12 +180,22 @@ export const pocketbaseApi = {
 
   async getCustomerOrders() {
     const current = auth.getSession();
-    return current ? orderQuery("customer", current.user_id) : [];
+    if (!current) return [];
+    try {
+      return await orderQuery("customer", current.user_id);
+    } catch (error) {
+      return queryFailure(error);
+    }
   },
 
   async getStoreOrders() {
     const storeId = auth.getBoundStoreId();
-    return storeId ? orderQuery("store", storeId) : [];
+    if (!storeId) return [];
+    try {
+      return await orderQuery("store", storeId);
+    } catch (error) {
+      return queryFailure(error);
+    }
   },
 
   updateOrderStatus(orderId, nextStatus) {
@@ -209,10 +247,6 @@ export const pocketbaseApi = {
     return [];
   },
 
-  getAdminOrders() {
-    return orderQuery();
-  },
-
   async createStoreAccount(storeId, username, password, displayName) {
     return appSend("/api/app/create-store-account", {
       store_id: storeId,
@@ -256,14 +290,15 @@ export const pocketbaseApi = {
     const client = await getPocketBase();
     try {
       const data = await client.collection("stores").update(storeId, values);
-      if (patch.status === "disabled" || patch.status === "open") {
+      if (patch.status === "disabled" || patch.status === "open" || patch.status === "closed") {
         const users = await client.collection(AUTH_COLLECTION).getFullList({
           filter: client.filter("store = {:id} && role = 'store'", { id: storeId }),
         });
+        const nextUserStatus = patch.status === "disabled" ? "disabled" : "active";
         await Promise.all(
           users.map((user) =>
             client.collection(AUTH_COLLECTION).update(user.id, {
-              status: patch.status === "disabled" ? "disabled" : "active",
+              status: nextUserStatus,
             })
           )
         );
@@ -278,19 +313,45 @@ export const pocketbaseApi = {
     return appSend("/api/app/delete-store", { store_id: storeId });
   },
 
+  disableStore(storeId) {
+    return appSend("/api/app/disable-store", { store_id: storeId });
+  },
+
+  enableStore(storeId) {
+    return appSend("/api/app/enable-store", { store_id: storeId });
+  },
+
   async getStoreImpact(storeId) {
-    const client = await getPocketBase();
-    const filter = client.filter("store = {:id}", { id: storeId });
-    const [products, orders, users] = await Promise.all([
-      client.collection("products").getList(1, 1, { filter }),
-      client.collection("orders").getList(1, 1, { filter }),
-      client.collection(AUTH_COLLECTION).getList(1, 1, { filter }),
-    ]);
-    return {
-      products: products.totalItems || 0,
-      orders: orders.totalItems || 0,
-      users: users.totalItems || 0,
-    };
+    try {
+      const client = await getPocketBase();
+      const filter = client.filter("store = {:id}", { id: storeId });
+      const [products, orders, users, notifications, reviews] = await Promise.all([
+        client.collection("products").getList(1, 1, { filter }),
+        client.collection("orders").getList(1, 1, { filter }),
+        client.collection(AUTH_COLLECTION).getList(1, 1, { filter }),
+        client.collection("notifications").getList(1, 1, { filter }),
+        client.collection("reviews").getList(1, 1, { filter }),
+      ]);
+      let images = 0;
+      try {
+        const productRows = await client.collection("products").getFullList({ filter });
+        images = productRows.filter((row) => fileName(row.image)).length;
+      } catch {
+        images = 0;
+      }
+      return {
+        ok: true,
+        products: products.totalItems || 0,
+        orders: orders.totalItems || 0,
+        users: users.totalItems || 0,
+        notifications: notifications.totalItems || 0,
+        reviews: reviews.totalItems || 0,
+        images,
+        canDelete: canPermanentlyDeleteStore({ orders: orders.totalItems || 0 }),
+      };
+    } catch (error) {
+      return { ok: false, code: "backend_error", products: 0, orders: 0, users: 0, images: 0, canDelete: false };
+    }
   },
 
   async createProduct(payload) {
@@ -335,17 +396,33 @@ export const pocketbaseApi = {
 
   async getAdminUsers() {
     try {
+      const viaApi = await appSend("/api/app/admin-users", {});
+      if (viaApi?.ok && Array.isArray(viaApi.users)) {
+        return { ok: true, data: viaApi.users.map(sanitizeAdminUser).filter(Boolean) };
+      }
+      if (viaApi && viaApi.ok === false && viaApi.code && viaApi.code !== "not_found" && viaApi.code !== "server_not_configured") {
+        return { ok: false, data: [], code: viaApi.code === "not_admin" ? "permission_denied" : "users_load_failed" };
+      }
+    } catch {
+      /* fall through to client query */
+    }
+    try {
       const client = await getPocketBase();
-      const data = await client.collection(AUTH_COLLECTION).getFullList({ sort: "created" });
-      return data.map((row) => ({
-        ...row,
-        user_id: row.id,
-        name: row.display_name || row.name || "",
-        store_id: row.store || "",
-        created_at: row.created_at || row.created,
-      }));
+      // Avoid empty filter strings; page through instead of one giant full list when possible.
+      const data = await client.collection(AUTH_COLLECTION).getFullList({
+        sort: "-created",
+        fields: "id,email,display_name,role,status,store,grade,created",
+      });
+      return { ok: true, data: data.map(sanitizeAdminUser).filter(Boolean) };
     } catch (error) {
-      return queryFailure(error);
+      // Retry without fields in case school schema lacks one of them (fields mistmatch → 400).
+      try {
+        const client = await getPocketBase();
+        const data = await client.collection(AUTH_COLLECTION).getFullList({ sort: "-created" });
+        return { ok: true, data: data.map(sanitizeAdminUser).filter(Boolean) };
+      } catch (retryError) {
+        return queryErrorResult(retryError);
+      }
     }
   },
 
@@ -379,54 +456,95 @@ export const pocketbaseApi = {
     }
   },
 
+  async getAdminOrders() {
+    try {
+      const viaApi = await appSend("/api/app/admin-orders", {});
+      if (viaApi?.ok && Array.isArray(viaApi.orders)) {
+        return { ok: true, data: viaApi.orders.map((row) => normalizeOrder(row)) };
+      }
+    } catch {
+      /* client fallback */
+    }
+    try {
+      const data = await orderQuery();
+      return { ok: true, data };
+    } catch (error) {
+      return queryErrorResult(error);
+    }
+  },
+
   async getAdminStats() {
     try {
+      const viaApi = await appSend("/api/app/admin-stats", {});
+      if (viaApi?.ok && viaApi.stats) return { ok: true, data: viaApi.stats };
+    } catch {
+      /* client fallback */
+    }
+    try {
       const client = await getPocketBase();
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const start = today.toISOString().replace("T", " ");
-      const [stores, products, orders] = await Promise.all([
+      const dayKey = campusDateKey();
+      const todayFilter = pocketBaseCreatedRangeFilter(dayKey);
+      const [stores, products, allOrdersPage, todayOrders] = await Promise.all([
         client.collection("stores").getList(1, 1),
         client.collection("products").getList(1, 1),
+        client.collection("orders").getList(1, 1),
         client.collection("orders").getFullList({
-          filter: `created >= "${start}"`,
+          filter: todayFilter,
+          sort: "-created",
         }),
       ]);
-      const rows = await Promise.all(
-        (orders || []).map(async (order) => {
-          const items = await client.collection("order_items").getFullList({
+      const rows = [];
+      for (const order of todayOrders || []) {
+        let items = [];
+        try {
+          items = await client.collection("order_items").getFullList({
             filter: client.filter("order = {:id}", { id: order.id }),
           });
-          return { ...order, items };
-        })
-      );
-      const revenue = rows.reduce((sum, order) => sum + Number(order.total), 0);
+        } catch {
+          items = [];
+        }
+        rows.push({ ...order, items });
+      }
+      const revenue = sumTrustedRevenue(rows);
       const storeCounts = new Map();
       rows.forEach((order) => {
+        if (!isRevenueOrderSafe(order)) return;
         storeCounts.set(order.store, (storeCounts.get(order.store) || 0) + 1);
       });
       const productCounts = new Map();
-      rows.flatMap((order) => order.items || []).forEach((item) => {
-        productCounts.set(
-          item.product_name_snapshot,
-          (productCounts.get(item.product_name_snapshot) || 0) + Number(item.quantity)
-        );
+      rows.forEach((order) => {
+        if (!isRevenueOrderSafe(order)) return;
+        (order.items || []).forEach((item) => {
+          const name = item.product_name_snapshot || item.product_name || "";
+          if (!name) return;
+          productCounts.set(name, (productCounts.get(name) || 0) + Number(item.quantity || 0));
+        });
       });
-      const topProduct = [...productCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
-      const topStoreId = [...storeCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
       return {
-        stores: stores.totalItems || 0,
-        products: products.totalItems || 0,
-        orders: rows.length,
-        today: rows.length,
-        revenue,
-        topProduct,
-        topStoreId,
-        peakHour: null,
+        ok: true,
+        data: {
+          stores: stores.totalItems || 0,
+          products: products.totalItems || 0,
+          orders: allOrdersPage.totalItems || 0,
+          today: rows.length,
+          revenue,
+          topProduct: topKeyedCount(productCounts.entries()),
+          topStoreId: topKeyedCount(storeCounts.entries()),
+          statusCounts: statusDistribution(rows),
+          dateKey: dayKey,
+        },
       };
     } catch (error) {
-      console.error("PocketBase query failed", error);
-      return null;
+      console.error("PocketBase query failed", {
+        status: error?.status || "",
+        code: error?.data?.code || error?.message || "admin_stats",
+      });
+      return { ok: false, data: null, code: "backend_error" };
     }
   },
 };
+
+function isRevenueOrderSafe(order) {
+  const status = String(order?.status || "");
+  return status !== "cancelled" && status !== "rejected";
+}

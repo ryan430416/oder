@@ -328,6 +328,35 @@ if (env.APP_ENV === "production") {
   });
 }
 
+await ensure("admin_audit_logs", {
+  name: "admin_audit_logs",
+  type: "base",
+  ...COLLECTION_RULES.admin_audit_logs,
+  fields: [
+    { name: "actor_id", type: "text", required: true, max: 40 },
+    { name: "actor_role", type: "text", required: true, max: 20 },
+    { name: "store_id", type: "text", max: 40 },
+    { name: "store_name", type: "text", max: 120 },
+    {
+      name: "action",
+      type: "select",
+      required: true,
+      maxSelect: 1,
+      values: ["delete_store", "disable_store", "enable_store"],
+    },
+    {
+      name: "result",
+      type: "select",
+      required: true,
+      maxSelect: 1,
+      values: ["ok", "denied", "error"],
+    },
+    { name: "reason", type: "text", max: 300 },
+    { name: "impact_json", type: "text", max: 2000 },
+    ...autodate(),
+  ],
+});
+
 collections = await listCollections(url, token);
 for (const [name, rules] of Object.entries(COLLECTION_RULES)) {
   const collection = byName()[name];

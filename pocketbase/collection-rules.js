@@ -57,4 +57,11 @@ export const COLLECTION_RULES = {
     updateRule: ADMIN,
     deleteRule: ADMIN,
   },
+  admin_audit_logs: {
+    listRule: ADMIN,
+    viewRule: ADMIN,
+    createRule: null,
+    updateRule: null,
+    deleteRule: null,
+  },
 };

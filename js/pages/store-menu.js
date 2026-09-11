@@ -45,8 +45,17 @@ function clearPreviewUrl() {
 }
 
 function showPreview(url, alt = "") {
+  const usable = Boolean(String(url || "").trim());
+  retryUpload.hidden = true;
+  if (!usable) {
+    photoPreview.innerHTML = "";
+    photoPreview.hidden = true;
+    removePhoto.hidden = true;
+    return;
+  }
+  photoPreview.hidden = false;
   photoPreview.innerHTML = productImageHtml(url, alt);
-  removePhoto.hidden = !url;
+  removePhoto.hidden = false;
   mountImageUi(photoPreview);
 }
 

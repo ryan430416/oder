@@ -9,6 +9,11 @@ const FRIENDLY_CODES = new Set([
   "stores_load_failed",
   "cart_load_failed",
   "permission_denied",
+  "users_load_failed",
+  "orders_load_failed",
+  "analytics_load_failed",
+  "store_has_orders",
+  "store_delete_failed",
 ]);
 
 export function friendlyErrorCode(code) {

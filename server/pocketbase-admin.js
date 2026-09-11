@@ -87,10 +87,21 @@ export async function findFirst(collection, filter) {
 }
 
 export async function findAll(collection, filter) {
-  const query = filter ? `?filter=${encodeURIComponent(filter)}&perPage=200` : "?perPage=200";
-  const result = await adminFetch(`/api/collections/${collection}/records${query}`);
-  if (!result.ok) return [];
-  return result.data.items || [];
+  const items = [];
+  let page = 1;
+  for (;;) {
+    const query = new URLSearchParams({ page: String(page), perPage: "200" });
+    if (filter) query.set("filter", filter);
+    const result = await adminFetch(`/api/collections/${collection}/records?${query}`);
+    if (!result.ok) return items;
+    const batch = result.data.items || [];
+    items.push(...batch);
+    const total = Number(result.data.totalItems || items.length);
+    if (items.length >= total || batch.length === 0) break;
+    page += 1;
+    if (page > 100) break;
+  }
+  return items;
 }
 
 export async function findById(collection, id) {

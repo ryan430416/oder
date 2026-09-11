@@ -20,6 +20,24 @@ function ok(e, extra) {
   return e.json(200, Object.assign({ ok: true }, extra || {}));
 }
 
+function writeAudit(e, payload) {
+  try {
+    const collection = e.app.findCollectionByNameOrId("admin_audit_logs");
+    const row = new Record(collection);
+    row.set("actor_id", String(e.auth?.id || ""));
+    row.set("actor_role", String(e.auth?.get("role") || ""));
+    row.set("store_id", String(payload.store_id || ""));
+    row.set("store_name", String(payload.store_name || "").slice(0, 120));
+    row.set("action", String(payload.action || ""));
+    row.set("result", String(payload.result || ""));
+    row.set("reason", String(payload.reason || "").slice(0, 300));
+    row.set("impact_json", JSON.stringify(payload.impact || {}));
+    e.app.save(row);
+  } catch (err) {
+    // Collection may not exist yet on older school DBs.
+  }
+}
+
 function bodyOf(e) {
   return e.requestInfo().body || {};
 }
@@ -425,25 +443,119 @@ routerAdd(
     const storeId = String(bodyOf(e).store_id || "");
     const store = findById(e.app, "stores", storeId);
     if (!store) return fail(e, "no_store");
-    let orderCount = 0;
+    const orders = e.app.findAllRecords("orders", $dbx.hashExp({ store: storeId }));
+    if (orders.length) {
+      writeAudit(e, {
+        store_id: storeId,
+        store_name: store.get("name"),
+        action: "delete_store",
+        result: "denied",
+        reason: "store_has_orders",
+        impact: { orders: orders.length },
+      });
+      return fail(e, "store_has_orders");
+    }
     let productCount = 0;
-    e.app.runInTransaction((txApp) => {
-      const storeUsers = txApp.findAllRecords(AUTH, $dbx.hashExp({ store: storeId }));
-      for (let i = 0; i < storeUsers.length; i++) {
-        storeUsers[i].set("role", "customer");
-        storeUsers[i].set("status", "disabled");
-        storeUsers[i].set("store", "");
-        txApp.save(storeUsers[i]);
-      }
-      const orders = txApp.findAllRecords("orders", $dbx.hashExp({ store: storeId }));
-      orderCount = orders.length;
-      for (let i = 0; i < orders.length; i++) txApp.delete(orders[i]);
-      const products = txApp.findAllRecords("products", $dbx.hashExp({ store: storeId }));
-      productCount = products.length;
-      for (let i = 0; i < products.length; i++) txApp.delete(products[i]);
-      txApp.delete(store);
+    let userCount = 0;
+    let imageCount = 0;
+    try {
+      e.app.runInTransaction((txApp) => {
+        const storeUsers = txApp.findAllRecords(AUTH, $dbx.hashExp({ store: storeId }));
+        userCount = storeUsers.length;
+        for (let i = 0; i < storeUsers.length; i++) {
+          storeUsers[i].set("role", "customer");
+          storeUsers[i].set("status", "disabled");
+          storeUsers[i].set("store", "");
+          txApp.save(storeUsers[i]);
+        }
+        const notes = txApp.findAllRecords("notifications", $dbx.hashExp({ store: storeId }));
+        for (let i = 0; i < notes.length; i++) txApp.delete(notes[i]);
+        const reviews = txApp.findAllRecords("reviews", $dbx.hashExp({ store: storeId }));
+        for (let i = 0; i < reviews.length; i++) txApp.delete(reviews[i]);
+        const products = txApp.findAllRecords("products", $dbx.hashExp({ store: storeId }));
+        productCount = products.length;
+        for (let i = 0; i < products.length; i++) {
+          if (products[i].get("image")) imageCount += 1;
+          txApp.delete(products[i]);
+        }
+        txApp.delete(store);
+      });
+      writeAudit(e, {
+        store_id: storeId,
+        store_name: store.get("name"),
+        action: "delete_store",
+        result: "ok",
+        reason: "",
+        impact: { products: productCount, users: userCount, images: imageCount, orders: 0 },
+      });
+      return ok(e, { deleted: true, products: productCount, users: userCount, images: imageCount });
+    } catch (err) {
+      writeAudit(e, {
+        store_id: storeId,
+        store_name: store.get("name"),
+        action: "delete_store",
+        result: "error",
+        reason: String(err || "store_delete_failed").slice(0, 300),
+        impact: {},
+      });
+      return fail(e, "store_delete_failed");
+    }
+  },
+  $apis.requireAuth(AUTH)
+);
+
+routerAdd(
+  "POST",
+  "/api/app/disable-store",
+  (e) => {
+    if (!isAdmin(e.auth)) return fail(e, "not_admin");
+    const storeId = String(bodyOf(e).store_id || "");
+    const store = findById(e.app, "stores", storeId);
+    if (!store) return fail(e, "no_store");
+    store.set("status", "disabled");
+    e.app.save(store);
+    const users = e.app.findAllRecords(AUTH, $dbx.hashExp({ store: storeId, role: "store" }));
+    for (let i = 0; i < users.length; i++) {
+      users[i].set("status", "disabled");
+      e.app.save(users[i]);
+    }
+    writeAudit(e, {
+      store_id: storeId,
+      store_name: store.get("name"),
+      action: "disable_store",
+      result: "ok",
+      reason: "",
+      impact: { users: users.length },
     });
-    return ok(e, { deleted: true, orders: orderCount, products: productCount });
+    return ok(e, { disabled: true, store_id: storeId });
+  },
+  $apis.requireAuth(AUTH)
+);
+
+routerAdd(
+  "POST",
+  "/api/app/enable-store",
+  (e) => {
+    if (!isAdmin(e.auth)) return fail(e, "not_admin");
+    const storeId = String(bodyOf(e).store_id || "");
+    const store = findById(e.app, "stores", storeId);
+    if (!store) return fail(e, "no_store");
+    store.set("status", "open");
+    e.app.save(store);
+    const users = e.app.findAllRecords(AUTH, $dbx.hashExp({ store: storeId, role: "store" }));
+    for (let i = 0; i < users.length; i++) {
+      users[i].set("status", "active");
+      e.app.save(users[i]);
+    }
+    writeAudit(e, {
+      store_id: storeId,
+      store_name: store.get("name"),
+      action: "enable_store",
+      result: "ok",
+      reason: "",
+      impact: { users: users.length },
+    });
+    return ok(e, { enabled: true, store_id: storeId, users: users.length });
   },
   $apis.requireAuth(AUTH)
 );
