@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { canCustomerCancel, canTransition } from "../js/order-status.js";
 import { campusDateTimeParts } from "../js/campus-time.js";
+import { parseOrderQuantity } from "../js/quantity.js";
 import {
   adminConfigured,
   authFromHeader,
@@ -207,10 +208,10 @@ async function createOrder(authorization, body) {
   const prepared = [];
   let total = 0;
   for (const item of items) {
-    const qty = Number(item.quantity);
+    const qty = parseOrderQuantity(item.quantity);
     const product = await findById("products", String(item.product_id || ""));
     if (!product || product.store !== storeId || product.status !== "active") return fail("invalid_items");
-    if (!(qty >= 1 && qty <= 99 && Number.isInteger(qty))) return fail("invalid_items");
+    if (qty == null) return fail("invalid_items");
     const unit = moneyInt(product.price);
     if (unit == null) return fail("invalid_items");
     const subtotal = unit * qty;

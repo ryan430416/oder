@@ -37,8 +37,8 @@ function pngChunk(type, data) {
   return Buffer.concat([len, typeBuf, data, crc]);
 }
 
-/** Solid 128×128 PNG so seed images are never 1×1. */
-function mealPngBytes(size = 128) {
+/** Solid 800×800 PNG so seed images stay sharp when CSS-scaled (never 1×1 / 128×128). */
+function mealPngBytes(size = 800) {
   const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
@@ -204,7 +204,7 @@ await ensureProduct(url, token, closedStore.id, "隱藏餐點", {
 });
 
 const form = new FormData();
-form.append("image", new Blob([mealPngBytes(128)], { type: "image/png" }), "meal.png");
+form.append("image", new Blob([mealPngBytes(800)], { type: "image/png" }), "meal.png");
 const upload = await request(url, `/api/collections/products/records/${withImage.id}`, {
   method: "PATCH",
   token,

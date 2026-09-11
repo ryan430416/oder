@@ -146,9 +146,11 @@ test("image signatures only accept JPEG, PNG and WebP", () => {
   assert.equal(detectImageMime(Uint8Array.from(Buffer.from("<svg>"))), "");
   assert.equal(IMAGE_LIMITS.sourceBytes, 8 * 1024 * 1024);
   assert.equal(IMAGE_LIMITS.outputBytes, 1024 * 1024);
-  assert.equal(IMAGE_LIMITS.minEdge, 100);
+  assert.equal(IMAGE_LIMITS.minEdge, 400);
+  assert.equal(IMAGE_LIMITS.maxEdge, 1600);
   assert.equal(isUsableImageDimension(1, 1), false);
-  assert.equal(isUsableImageDimension(100, 100), true);
+  assert.equal(isUsableImageDimension(128, 128), false);
+  assert.equal(isUsableImageDimension(400, 400), true);
   assert.match(DEFAULT_PRODUCT_IMAGE, /default-meal\.svg/);
 });
 
@@ -196,8 +198,19 @@ test("cart enforces one store and quantity 1 to 99", async () => {
   assert.equal(cart.count(), 99);
   assert.equal(cart.add({ ...product, product_id: "p2", store_id: "s2" }, 1).code, "OTHER_STORE");
   assert.equal(cart.add({ ...product, product_id: "p3", status: "soldout" }, 1).ok, false);
-  cart.setQty("p1", 200);
+  assert.equal(cart.setQty("p1", 200).quantity, 99);
   assert.equal(cart.count(), 99);
+  assert.equal(cart.setQty("p1", 1).ok, true);
+  assert.equal(cart.setQty("p1", "").empty, true);
+  assert.equal(cart.count(), 1);
+  assert.equal(cart.setQty("p1", "1.5").ok, false);
+  assert.equal(cart.setQty("p1", "-2").ok, false);
+  assert.equal(cart.setQty("p1", "1e2").ok, false);
+  assert.equal(cart.count(), 1);
+  assert.equal(cart.setQty("p1", "0").quantity, 1);
+  assert.equal(cart.setQty("p1", "100").quantity, 99);
+  assert.equal(cart.total(), 50 * 99);
+  assert.equal(cart.get().items[0].quantity, 99);
 });
 
 test("campus time converts Bangkok wall clock without device timezone", () => {

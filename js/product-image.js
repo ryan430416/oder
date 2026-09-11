@@ -7,8 +7,14 @@ export const IMAGE_LIMITS = {
   sourceBytes: 8 * 1024 * 1024,
   outputBytes: 1024 * 1024,
   minOutputBytes: 500,
+  /** Longest edge kept after compress (1200–1600). */
   maxEdge: 1600,
-  minEdge: 100,
+  /** Reject uploads smaller than this on either side. */
+  minEdge: 400,
+  /** UI fallback only for broken/tiny decoded assets (not list thumbs). */
+  minDisplayEdge: 48,
+  /** PocketBase list thumb request size. */
+  listThumb: "400x400",
 };
 
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -171,23 +177,16 @@ export async function compressProductImage(file) {
     try {
       source = await decodeImage(file);
       if (!isUsableImageDimension(source.width, source.height)) {
-        return { ok: false, code: "image_compress_failed" };
+        return { ok: false, code: "image_too_small" };
       }
+      // Scale down only; never force a fixed square like 128×128.
       const scale = Math.min(1, IMAGE_LIMITS.maxEdge / Math.max(source.width, source.height));
-      let width = Math.max(IMAGE_LIMITS.minEdge, Math.round(source.width * scale));
-      let height = Math.max(IMAGE_LIMITS.minEdge, Math.round(source.height * scale));
-      // Preserve aspect ratio after min-edge clamp.
-      if (source.width >= source.height) {
-        height = Math.max(IMAGE_LIMITS.minEdge, Math.round((source.height / source.width) * width));
-      } else {
-        width = Math.max(IMAGE_LIMITS.minEdge, Math.round((source.width / source.height) * height));
-      }
+      let width = Math.round(source.width * scale);
+      let height = Math.round(source.height * scale);
       let quality = 0.8;
       let blob;
       for (let attempt = 0; attempt < 6; attempt += 1) {
-        if (!isUsableImageDimension(width, height)) {
-          return { ok: false, code: "image_compress_failed" };
-        }
+        if (width < 1 || height < 1) return { ok: false, code: "image_compress_failed" };
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
@@ -205,9 +204,11 @@ export async function compressProductImage(file) {
           break;
         }
         quality = Math.max(0.55, quality - 0.07);
-        const nextWidth = Math.max(IMAGE_LIMITS.minEdge, Math.round(width * 0.88));
-        const nextHeight = Math.max(IMAGE_LIMITS.minEdge, Math.round(height * 0.88));
+        const nextWidth = Math.round(width * 0.88);
+        const nextHeight = Math.round(height * 0.88);
         if (nextWidth === width && nextHeight === height) break;
+        // Stop shrinking below upload floor; prefer quality drop.
+        if (nextWidth < IMAGE_LIMITS.minEdge || nextHeight < IMAGE_LIMITS.minEdge) break;
         width = nextWidth;
         height = nextHeight;
       }
@@ -215,7 +216,7 @@ export async function compressProductImage(file) {
         return { ok: false, code: "image_compress_failed" };
       }
       if (blob.size > IMAGE_LIMITS.outputBytes) return { ok: false, code: "image_compress_failed" };
-      if (!isUsableImageDimension(width, height)) return { ok: false, code: "image_compress_failed" };
+      if (!isUsableImageDimension(width, height)) return { ok: false, code: "image_too_small" };
       const mime = blob.type || "image/webp";
       if (mime !== "image/webp") return { ok: false, code: "image_compress_failed" };
       return { ok: true, blob, width, height, mime };
@@ -223,6 +224,7 @@ export async function compressProductImage(file) {
       source?.close?.();
     }
   } catch (error) {
+    if (error?.message === "image_too_small") return { ok: false, code: "image_too_small" };
     console.error("Image compression failed", error);
     return { ok: false, code: "image_compress_failed" };
   }

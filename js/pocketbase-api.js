@@ -24,16 +24,19 @@ function normalizeStore(row) {
   };
 }
 
-function normalizeProduct(row, runtimeUrl = "") {
+function normalizeProduct(row, runtimeUrl = "", fullUrl = "") {
   if (!row) return null;
   const imagePath = fileName(row.image);
+  const display = runtimeUrl || row.image_url || "";
+  const full = fullUrl || display;
   return {
     ...row,
     product_id: row.id,
     product_name: row.name,
     store_id: row.store || row.store_id || "",
     image_path: imagePath,
-    image: runtimeUrl || row.image_url || "",
+    image: display,
+    image_full: full,
     created_at: row.created_at || row.created,
     updated_at: row.updated_at || row.updated,
   };
@@ -62,16 +65,20 @@ function queryFailure(error, fallback = []) {
   return fallback;
 }
 
-function productFileUrl(client, row, filename) {
+function productFileUrl(client, row, filename, thumb = "") {
   if (!filename) return "";
   const getter = client.files.getURL || client.files.getUrl;
-  return getter ? getter.call(client.files, row, filename) : "";
+  if (!getter) return "";
+  if (thumb) return getter.call(client.files, row, filename, { thumb });
+  return getter.call(client.files, row, filename);
 }
 
 function withProductUrls(client, rows) {
   return (rows || []).map((row) => {
     const filename = fileName(row.image);
-    return normalizeProduct(row, productFileUrl(client, row, filename));
+    const full = productFileUrl(client, row, filename);
+    const thumb = productFileUrl(client, row, filename, "400x400") || full;
+    return normalizeProduct(row, thumb, full);
   });
 }
 

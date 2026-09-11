@@ -31,13 +31,15 @@ export function productImageSrc(image) {
   return usableProductImage(value) ? value : DEFAULT_PRODUCT_IMAGE;
 }
 
-export function productImageHtml(image, alt = "") {
+export function productImageHtml(image, alt = "", options = {}) {
   const altText = String(alt ?? "").trim() || t("product_photo_alt");
   const src = productImageSrc(image);
+  const previewRaw = options.previewSrc != null ? options.previewSrc : image;
+  const previewSrc = productImageSrc(previewRaw);
   const fallback = DEFAULT_PRODUCT_IMAGE;
   const img = `<img class="product-photo" src="${escapeAttr(src)}" alt="${escapeAttr(altText)}" loading="lazy" data-default-src="${escapeAttr(fallback)}" />`;
   if (usableProductImage(image) && src !== fallback) {
-    return `<button class="product-image-button" type="button" data-image-preview="${escapeAttr(src)}" aria-label="${escapeAttr(altText)}">${img}</button>`;
+    return `<button class="product-image-button" type="button" data-image-preview="${escapeAttr(previewSrc)}" aria-label="${escapeAttr(altText)}">${img}</button>`;
   }
   return img;
 }

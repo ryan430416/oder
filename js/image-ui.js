@@ -1,5 +1,5 @@
 import { DEFAULT_PRODUCT_IMAGE } from "./html.js";
-import { IMAGE_LIMITS, isUsableImageDimension } from "./product-image.js";
+import { IMAGE_LIMITS } from "./product-image.js";
 import { t } from "./i18n.js";
 
 export function applyProductImageFallback(image) {
@@ -21,16 +21,15 @@ function inspectLoadedPhoto(image) {
   if (!image || image.dataset.fallbackApplied === "1") return;
   const width = image.naturalWidth || 0;
   const height = image.naturalHeight || 0;
-  if (!isUsableImageDimension(width, height) || width < IMAGE_LIMITS.minEdge || height < IMAGE_LIMITS.minEdge) {
+  // Only reject broken/tiny assets (1×1); list thumbs may be smaller than upload minEdge.
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width < IMAGE_LIMITS.minDisplayEdge ||
+    height < IMAGE_LIMITS.minDisplayEdge
+  ) {
     applyProductImageFallback(image);
   }
-}
-
-function clearLightboxImage(image) {
-  if (!image) return;
-  image.removeAttribute("src");
-  image.alt = "";
-  image.hidden = true;
 }
 
 export function mountImageUi(root = document) {
@@ -58,17 +57,35 @@ export function mountImageUi(root = document) {
   const closeButton = document.createElement("button");
   closeButton.className = "btn";
   closeButton.type = "button";
-  closeButton.setAttribute("aria-label", "Close");
+  closeButton.setAttribute("aria-label", t("close_preview"));
   closeButton.textContent = "×";
-  const preview = document.createElement("img");
-  preview.hidden = true;
-  preview.alt = "";
-  dialog.append(closeButton, preview);
+  dialog.append(closeButton);
   document.body.append(dialog);
 
+  let preview = null;
+  let lastFocus = null;
+
+  const clearLightboxImage = () => {
+    if (preview) {
+      preview.onload = null;
+      preview.onerror = null;
+      preview.remove();
+      preview = null;
+    }
+  };
+
   const closeDialog = () => {
-    clearLightboxImage(preview);
+    clearLightboxImage();
     if (dialog.open) dialog.close();
+    const restore = lastFocus;
+    lastFocus = null;
+    if (restore && typeof restore.focus === "function") {
+      try {
+        restore.focus();
+      } catch {
+        /* ignore */
+      }
+    }
   };
 
   closeButton.addEventListener("click", closeDialog);
@@ -79,7 +96,7 @@ export function mountImageUi(root = document) {
     event.preventDefault();
     closeDialog();
   });
-  dialog.addEventListener("close", () => clearLightboxImage(preview));
+  dialog.addEventListener("close", () => clearLightboxImage());
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && dialog.open) closeDialog();
@@ -90,10 +107,14 @@ export function mountImageUi(root = document) {
     if (!trigger) return;
     const src = String(trigger.dataset.imagePreview || "").trim();
     if (!src) return;
-    preview.hidden = false;
+    event.preventDefault();
+    clearLightboxImage();
+    preview = document.createElement("img");
     preview.alt = trigger.getAttribute("aria-label") || t("product_photo_alt");
     preview.src = src;
     preview.onerror = () => closeDialog();
+    dialog.append(preview);
+    lastFocus = document.activeElement;
     dialog.showModal();
     closeButton.focus();
   });

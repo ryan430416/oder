@@ -7,6 +7,7 @@ import { initI18n, t, storeLabel, productLabel } from "../i18n.js";
 import { escapeHtml } from "../html.js";
 import { createInflight } from "../ui-state.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
+import { parseOrderQuantity } from "../quantity.js";
 
 initI18n();
 
@@ -64,13 +65,11 @@ async function loadCheckout() {
         const product = products.find(
           (candidate) => candidate.product_id === item.product_id && candidate.status === "active"
         );
-        const quantity = Number(item.quantity);
+        const quantity = parseOrderQuantity(item.quantity);
         const price = Number(product?.price);
         if (
           !product ||
-          !Number.isInteger(quantity) ||
-          quantity < 1 ||
-          quantity > 99 ||
+          quantity == null ||
           !Number.isFinite(price) ||
           price < 0
         ) {

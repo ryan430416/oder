@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { canTransition } from "../js/order-status.js";
 import { moneyInt, isServicePickupTime, pickupIsWithinOrderWindow } from "../server/app-handlers.js";
+import { parseOrderQuantity } from "../js/quantity.js";
 import { sanitizePocketBaseUrl } from "../js/config.js";
 import { COLLECTION_RULES } from "../pocketbase/collection-rules.js";
 
@@ -10,6 +11,17 @@ test("order totals only accept whole numbers and ignore client totals", () => {
   assert.equal(moneyInt("40"), 40);
   assert.equal(moneyInt(12.5), null);
   assert.equal(moneyInt(-1), null);
+});
+
+test("create-order quantity must be an integer 1–99", () => {
+  assert.equal(parseOrderQuantity(1), 1);
+  assert.equal(parseOrderQuantity(99), 99);
+  assert.equal(parseOrderQuantity(100), null);
+  assert.equal(parseOrderQuantity(0), null);
+  assert.equal(parseOrderQuantity(1.2), null);
+  assert.equal(parseOrderQuantity(-1), null);
+  assert.equal(parseOrderQuantity("1e2"), null);
+  assert.equal(parseOrderQuantity(Infinity), null);
 });
 
 test("pickup windows stay time-only school slots in Asia/Bangkok", () => {

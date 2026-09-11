@@ -110,7 +110,7 @@ async function render() {
     .map(
       (product) => `
       <article class="card product-admin-card">
-        ${productImageHtml(product.image, product.product_name)}
+        ${productImageHtml(product.image, product.product_name, { previewSrc: product.image_full || product.image })}
         <strong>${escapeHtml(productLabel(product.product_id, product.product_name))}</strong>
         <div class="muted">${escapeHtml(categoryLabel(product.category))}</div>
         <div class="muted">${escapeHtml(productDesc(product.product_id, product.description))}</div>

@@ -245,12 +245,24 @@ routerAdd(
     const prepared = [];
     let total = 0;
     for (let i = 0; i < items.length; i++) {
-      const qty = Number(items[i].quantity);
+      const rawQty = items[i].quantity;
+      let qty = null;
+      if (typeof rawQty === "number") {
+        if (Number.isFinite(rawQty) && rawQty === Math.floor(rawQty) && rawQty >= 1 && rawQty <= 99) {
+          qty = rawQty;
+        }
+      } else if (typeof rawQty === "string") {
+        const text = rawQty.trim();
+        if (/^\d+$/.test(text)) {
+          const n = Number(text);
+          if (Number.isFinite(n) && n === Math.floor(n) && n >= 1 && n <= 99) qty = n;
+        }
+      }
       const product = findById(e.app, "products", String(items[i].product_id || ""));
       if (!product || product.get("store") !== storeId || product.get("status") !== "active") {
         return fail(e, "invalid_items");
       }
-      if (!(qty >= 1 && qty <= 99 && qty === Math.floor(qty))) return fail(e, "invalid_items");
+      if (qty == null) return fail(e, "invalid_items");
       const unit = Number(product.get("price"));
       const subtotal = unit * qty;
       total += subtotal;

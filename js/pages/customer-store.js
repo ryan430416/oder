@@ -68,7 +68,7 @@ async function boot() {
           return `
       <article class="card product">
         <div>
-          ${productImageHtml(p.image, p.product_name)}
+          ${productImageHtml(p.image, p.product_name, { previewSrc: p.image_full || p.image })}
           <h3>${escapeHtml(productLabel(p.product_id, p.product_name))}</h3>
           <div class="muted">${escapeHtml(productDesc(p.product_id, p.description))}</div>
           <div class="price">${money(p.price)}</div>
