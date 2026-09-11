@@ -12,9 +12,12 @@ test("order totals only accept whole numbers and ignore client totals", () => {
   assert.equal(moneyInt(-1), null);
 });
 
-test("pickup windows stay time-only school slots", () => {
-  const pickup = new Date("2026-09-11T00:35:00.000Z");
+test("pickup windows stay time-only school slots in Asia/Bangkok", () => {
+  const pickup = new Date("2026-09-11T01:35:00.000Z"); // 08:35 Bangkok
   assert.equal(isServicePickupTime(pickup), true);
+  const evening = new Date("2026-09-11T10:15:00.000Z"); // 17:15 Bangkok
+  assert.equal(isServicePickupTime(evening), true);
+  assert.equal(evening.toISOString(), "2026-09-11T10:15:00.000Z");
   const now = new Date("2026-09-10T16:00:00.000Z");
   assert.equal(pickupIsWithinOrderWindow(pickup, now), true);
 });

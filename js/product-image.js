@@ -6,7 +6,9 @@ export const PRODUCT_IMAGE_BUCKET = "product-images";
 export const IMAGE_LIMITS = {
   sourceBytes: 8 * 1024 * 1024,
   outputBytes: 1024 * 1024,
+  minOutputBytes: 500,
   maxEdge: 1600,
+  minEdge: 100,
 };
 
 const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -52,6 +54,15 @@ function normalizeDeclaredType(type) {
   return DECLARED_TYPE_ALIAS[value] || value;
 }
 
+export function isUsableImageDimension(width, height) {
+  return (
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width >= IMAGE_LIMITS.minEdge &&
+    height >= IMAGE_LIMITS.minEdge
+  );
+}
+
 export async function validateProductImage(file) {
   if (!file || !file.size) return { ok: false, code: "invalid_image_type" };
   if (file.size > IMAGE_LIMITS.sourceBytes) return { ok: false, code: "invalid_image_size" };
@@ -77,30 +88,106 @@ function canvasBlob(canvas, quality) {
   });
 }
 
+function loadViaImageElement(file) {
+  return new Promise((resolve, reject) => {
+    if (typeof Image === "undefined" || typeof URL === "undefined") {
+      reject(new Error("image_compress_failed"));
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      if (!isUsableImageDimension(image.naturalWidth, image.naturalHeight)) {
+        reject(new Error("image_too_small"));
+        return;
+      }
+      resolve({
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        draw(context, width, height) {
+          context.drawImage(image, 0, 0, width, height);
+        },
+        close() {},
+      });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("image_compress_failed"));
+    };
+    image.src = url;
+  });
+}
+
 async function decodeImage(file) {
   if (typeof createImageBitmap === "function") {
     try {
-      return await createImageBitmap(file, { imageOrientation: "from-image" });
-    } catch {
-      return createImageBitmap(file);
+      const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+      if (!isUsableImageDimension(bitmap.width, bitmap.height)) {
+        bitmap.close?.();
+        throw new Error("image_too_small");
+      }
+      return {
+        width: bitmap.width,
+        height: bitmap.height,
+        draw(context, width, height) {
+          context.drawImage(bitmap, 0, 0, width, height);
+        },
+        close() {
+          bitmap.close?.();
+        },
+      };
+    } catch (error) {
+      if (error?.message === "image_too_small") throw error;
+      try {
+        const bitmap = await createImageBitmap(file);
+        if (!isUsableImageDimension(bitmap.width, bitmap.height)) {
+          bitmap.close?.();
+          throw new Error("image_too_small");
+        }
+        return {
+          width: bitmap.width,
+          height: bitmap.height,
+          draw(context, width, height) {
+            context.drawImage(bitmap, 0, 0, width, height);
+          },
+          close() {
+            bitmap.close?.();
+          },
+        };
+      } catch (inner) {
+        if (inner?.message === "image_too_small") throw inner;
+      }
     }
   }
-  throw new Error("image_compress_failed");
+  return loadViaImageElement(file);
 }
 
 export async function compressProductImage(file) {
   try {
     const validation = await validateProductImage(file);
     if (!validation.ok) return validation;
-    let bitmap;
+    let source;
     try {
-      bitmap = await decodeImage(file);
-      const scale = Math.min(1, IMAGE_LIMITS.maxEdge / Math.max(bitmap.width, bitmap.height));
-      let width = Math.max(1, Math.round(bitmap.width * scale));
-      let height = Math.max(1, Math.round(bitmap.height * scale));
+      source = await decodeImage(file);
+      if (!isUsableImageDimension(source.width, source.height)) {
+        return { ok: false, code: "image_compress_failed" };
+      }
+      const scale = Math.min(1, IMAGE_LIMITS.maxEdge / Math.max(source.width, source.height));
+      let width = Math.max(IMAGE_LIMITS.minEdge, Math.round(source.width * scale));
+      let height = Math.max(IMAGE_LIMITS.minEdge, Math.round(source.height * scale));
+      // Preserve aspect ratio after min-edge clamp.
+      if (source.width >= source.height) {
+        height = Math.max(IMAGE_LIMITS.minEdge, Math.round((source.height / source.width) * width));
+      } else {
+        width = Math.max(IMAGE_LIMITS.minEdge, Math.round((source.width / source.height) * height));
+      }
       let quality = 0.8;
       let blob;
       for (let attempt = 0; attempt < 6; attempt += 1) {
+        if (!isUsableImageDimension(width, height)) {
+          return { ok: false, code: "image_compress_failed" };
+        }
         const canvas = document.createElement("canvas");
         canvas.width = width;
         canvas.height = height;
@@ -108,20 +195,32 @@ export async function compressProductImage(file) {
         if (!context) return { ok: false, code: "image_compress_failed" };
         context.fillStyle = "#fff";
         context.fillRect(0, 0, width, height);
-        context.drawImage(bitmap, 0, 0, width, height);
+        source.draw(context, width, height);
         blob = await canvasBlob(canvas, quality);
-        if (blob.size > 0 && blob.size <= IMAGE_LIMITS.outputBytes) break;
+        if (
+          blob &&
+          blob.size >= IMAGE_LIMITS.minOutputBytes &&
+          blob.size <= IMAGE_LIMITS.outputBytes
+        ) {
+          break;
+        }
         quality = Math.max(0.55, quality - 0.07);
-        width = Math.max(1, Math.round(width * 0.88));
-        height = Math.max(1, Math.round(height * 0.88));
+        const nextWidth = Math.max(IMAGE_LIMITS.minEdge, Math.round(width * 0.88));
+        const nextHeight = Math.max(IMAGE_LIMITS.minEdge, Math.round(height * 0.88));
+        if (nextWidth === width && nextHeight === height) break;
+        width = nextWidth;
+        height = nextHeight;
       }
-      if (!blob || blob.size <= 0) return { ok: false, code: "image_compress_failed" };
+      if (!blob || blob.size < IMAGE_LIMITS.minOutputBytes) {
+        return { ok: false, code: "image_compress_failed" };
+      }
       if (blob.size > IMAGE_LIMITS.outputBytes) return { ok: false, code: "image_compress_failed" };
+      if (!isUsableImageDimension(width, height)) return { ok: false, code: "image_compress_failed" };
       const mime = blob.type || "image/webp";
       if (mime !== "image/webp") return { ok: false, code: "image_compress_failed" };
       return { ok: true, blob, width, height, mime };
     } finally {
-      bitmap?.close?.();
+      source?.close?.();
     }
   } catch (error) {
     console.error("Image compression failed", error);
@@ -184,6 +283,10 @@ function uploadBlob(productId, blob, onProgress) {
         resolve({ ok: false, code: "session_expired" });
         return;
       }
+      if (!blob || blob.size < IMAGE_LIMITS.minOutputBytes) {
+        resolve({ ok: false, code: "image_compress_failed" });
+        return;
+      }
       const form = new FormData();
       form.append("image", blob, "product.webp");
       const request = new XMLHttpRequest();
@@ -239,6 +342,9 @@ export async function uploadProductImage(file, storeId, productId, options = {})
     if (!isRecordId(productId)) return { ok: false, code: "product_save_failed" };
     const compressed = await compressProductImage(file);
     if (!compressed.ok) return compressed;
+    if (!isUsableImageDimension(compressed.width, compressed.height)) {
+      return { ok: false, code: "image_compress_failed" };
+    }
     debugUpload({ stage: "compress", path: `${storeId}/${productId}`, code: "ok" });
     return uploadBlob(productId, compressed.blob, options.onProgress);
   } catch (error) {
@@ -248,6 +354,5 @@ export async function uploadProductImage(file, storeId, productId, options = {})
 }
 
 export async function deleteProductImage(_path) {
-  // PocketBase deletes files with the product record, and a new upload replaces the old file.
   return { ok: true };
 }

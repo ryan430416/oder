@@ -2,20 +2,21 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { isPickupTimeAllowed, pickupSlotsForStore } from "../js/format.js";
-import { escapeHtml, productImageHtml } from "../js/html.js";
+import { atCampus, campusDateKey, campusClock } from "../js/campus-time.js";
+import { escapeHtml, productImageHtml, DEFAULT_PRODUCT_IMAGE } from "../js/html.js";
 import {
   buildProductImagePath,
   detectImageMime,
   IMAGE_LIMITS,
+  isUsableImageDimension,
   isValidProductImagePath,
 } from "../js/product-image.js";
 import { canCustomerCancel, canTransition } from "../js/order-status.js";
 import { normalizeStoreImage, STORE_ICONS } from "../js/store-image.js";
 
 const pad = (n) => String(n).padStart(2, "0");
-const taipei = (hour, minute, day = 27) =>
-  new Date(`2026-08-${pad(day)}T${pad(hour)}:${pad(minute)}:00+08:00`);
-const localDate = (hour, minute) => new Date(2026, 7, 27, hour, minute, 0, 0);
+const bangkok = (hour, minute, day = 27) =>
+  new Date(`2026-08-${pad(day)}T${pad(hour)}:${pad(minute)}:00+07:00`);
 
 test("HTML escaping and image rendering reject executable URLs", () => {
   assert.equal(
@@ -42,26 +43,26 @@ test("customers can order overnight for the next morning pickup window", () => {
     status: "open",
     service_periods: ["breakfast", "lunch", "afternoon_tea"],
   };
-  const morning = taipei(8, 0);
-  const nextBreakfast = taipei(8, 35, 28);
+  const morning = bangkok(8, 0);
+  const nextBreakfast = bangkok(8, 35, 28);
   assert.equal(isPickupTimeAllowed(store, nextBreakfast.toISOString(), morning), true);
-  const lateNight = taipei(22, 0);
+  const lateNight = bangkok(22, 0);
   assert.equal(isPickupTimeAllowed(store, nextBreakfast.toISOString(), lateNight), true);
   const nightSlots = pickupSlotsForStore(store, lateNight);
   assert.ok(nightSlots.some((slot) => slot.label === "08:35–08:45" && new Date(slot.value).getUTCDate() === 28));
 });
 
-test("checkout lists each school pickup window once", () => {
+test("checkout lists each school pickup window once in Asia/Bangkok", () => {
   const store = {
     status: "open",
     service_periods: ["breakfast", "lunch"],
   };
-  assert.equal(isPickupTimeAllowed(store, taipei(8, 40).toISOString(), taipei(8, 0)), true);
-  assert.equal(isPickupTimeAllowed(store, taipei(8, 50).toISOString(), taipei(8, 0)), false);
-  assert.equal(isPickupTimeAllowed(store, taipei(12, 15).toISOString(), taipei(8, 0)), true);
-  assert.equal(isPickupTimeAllowed(store, taipei(17, 20).toISOString(), taipei(16, 0)), true);
-  assert.equal(isPickupTimeAllowed({ ...store, status: "closed" }, taipei(17, 20), taipei(16, 0)), false);
-  const slots = pickupSlotsForStore(store, taipei(8, 0));
+  assert.equal(isPickupTimeAllowed(store, bangkok(8, 40).toISOString(), bangkok(8, 0)), true);
+  assert.equal(isPickupTimeAllowed(store, bangkok(8, 50).toISOString(), bangkok(8, 0)), false);
+  assert.equal(isPickupTimeAllowed(store, bangkok(12, 15).toISOString(), bangkok(8, 0)), true);
+  assert.equal(isPickupTimeAllowed(store, bangkok(17, 20).toISOString(), bangkok(16, 0)), true);
+  assert.equal(isPickupTimeAllowed({ ...store, status: "closed" }, bangkok(17, 20), bangkok(16, 0)), false);
+  const slots = pickupSlotsForStore(store, bangkok(8, 0));
   assert.deepEqual(
     slots.map((slot) => slot.label),
     [
@@ -74,7 +75,9 @@ test("checkout lists each school pickup window once", () => {
       "18:15–18:25",
     ]
   );
-  const eveningSlots = pickupSlotsForStore(store, taipei(22, 0));
+  const evening = slots.find((slot) => slot.label === "17:15–17:30");
+  assert.equal(evening.value, "2026-08-27T10:15:00.000Z");
+  const eveningSlots = pickupSlotsForStore(store, bangkok(22, 0));
   assert.deepEqual(
     eveningSlots.map((slot) => slot.label),
     [
@@ -88,6 +91,7 @@ test("checkout lists each school pickup window once", () => {
     ]
   );
   assert.equal(new Date(eveningSlots[0].value).getUTCDate(), 28);
+  assert.doesNotMatch(eveningSlots.map((s) => s.label).join(" "), /2026|今天|明天|today|tomorrow/i);
 });
 
 test("short evening window stays bookable until 15 minutes before it ends", () => {
@@ -95,21 +99,21 @@ test("short evening window stays bookable until 15 minutes before it ends", () =
     status: "open",
     service_periods: ["breakfast", "lunch"],
   };
-  const now = taipei(18, 5);
+  const now = bangkok(18, 5);
   const slots = pickupSlotsForStore(store, now);
   const evening = slots.find((slot) => slot.label === "18:15–18:25");
   assert.ok(evening);
-  assert.equal(evening.value, taipei(18, 20).toISOString());
+  assert.equal(evening.value, bangkok(18, 20).toISOString());
   assert.equal(isPickupTimeAllowed(store, evening.value, now), true);
-  assert.equal(isPickupTimeAllowed(store, taipei(18, 20).toISOString(), taipei(18, 12)), false);
-  const tomorrowEvening = pickupSlotsForStore(store, taipei(18, 12)).find(
+  assert.equal(isPickupTimeAllowed(store, bangkok(18, 20).toISOString(), bangkok(18, 12)), false);
+  const tomorrowEvening = pickupSlotsForStore(store, bangkok(18, 12)).find(
     (slot) => slot.label === "18:15–18:25"
   );
   assert.ok(tomorrowEvening);
   assert.equal(new Date(tomorrowEvening.value).getUTCDate(), 28);
 });
 
-test("legacy operating windows correctly cross midnight", () => {
+test("legacy operating windows correctly cross midnight in Asia/Bangkok", () => {
   const overnight = {
     status: "open",
     service_periods: [],
@@ -117,14 +121,14 @@ test("legacy operating windows correctly cross midnight", () => {
     close_time: "02:00",
   };
   assert.equal(
-    isPickupTimeAllowed(overnight, localDate(23, 0).toISOString(), localDate(21, 0)),
+    isPickupTimeAllowed(overnight, bangkok(23, 0).toISOString(), bangkok(21, 0)),
     true
   );
-  const afterMidnight = new Date(2026, 7, 28, 1, 0);
-  const beforeMidnight = new Date(2026, 7, 27, 23, 30);
+  const afterMidnight = bangkok(1, 0, 28);
+  const beforeMidnight = bangkok(23, 30);
   assert.equal(isPickupTimeAllowed(overnight, afterMidnight.toISOString(), beforeMidnight), true);
   assert.equal(
-    isPickupTimeAllowed(overnight, new Date(2026, 7, 28, 3, 0).toISOString(), beforeMidnight),
+    isPickupTimeAllowed(overnight, bangkok(3, 0, 28).toISOString(), beforeMidnight),
     false
   );
 });
@@ -142,6 +146,10 @@ test("image signatures only accept JPEG, PNG and WebP", () => {
   assert.equal(detectImageMime(Uint8Array.from(Buffer.from("<svg>"))), "");
   assert.equal(IMAGE_LIMITS.sourceBytes, 8 * 1024 * 1024);
   assert.equal(IMAGE_LIMITS.outputBytes, 1024 * 1024);
+  assert.equal(IMAGE_LIMITS.minEdge, 100);
+  assert.equal(isUsableImageDimension(1, 1), false);
+  assert.equal(isUsableImageDimension(100, 100), true);
+  assert.match(DEFAULT_PRODUCT_IMAGE, /default-meal\.svg/);
 });
 
 test("Storage paths use store/product/UUID.webp", () => {
@@ -190,4 +198,11 @@ test("cart enforces one store and quantity 1 to 99", async () => {
   assert.equal(cart.add({ ...product, product_id: "p3", status: "soldout" }, 1).ok, false);
   cart.setQty("p1", 200);
   assert.equal(cart.count(), 99);
+});
+
+test("campus time converts Bangkok wall clock without device timezone", () => {
+  const slot = atCampus("2026-09-11", "17:15");
+  assert.equal(slot.toISOString(), "2026-09-11T10:15:00.000Z");
+  assert.equal(campusClock(slot), "17:15");
+  assert.equal(campusDateKey(slot), "2026-09-11");
 });

@@ -30,15 +30,25 @@ function pad(n, width) {
   return s;
 }
 
-function taipeiParts(date) {
-  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+function bangkokParts(date) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type) => Number(parts.find((part) => part.type === type).value);
   return {
-    year: shifted.getUTCFullYear(),
-    month: shifted.getUTCMonth() + 1,
-    day: shifted.getUTCDate(),
-    hour: shifted.getUTCHours(),
-    minute: shifted.getUTCMinutes(),
-    second: shifted.getUTCSeconds(),
+    year: get("year"),
+    month: get("month"),
+    day: get("day"),
+    hour: get("hour"),
+    minute: get("minute"),
+    second: get("second"),
   };
 }
 
@@ -50,7 +60,7 @@ function parseDate(value) {
 }
 
 function isServicePickupTime(date) {
-  const parts = taipeiParts(date);
+  const parts = bangkokParts(date);
   const minutes = parts.hour * 60 + parts.minute;
   for (let i = 0; i < PICKUP_WINDOWS.length; i++) {
     if (minutes >= PICKUP_WINDOWS[i][0] && minutes <= PICKUP_WINDOWS[i][1]) return true;
@@ -60,8 +70,8 @@ function isServicePickupTime(date) {
 
 function pickupIsWithinOrderWindow(pickup, now) {
   if (pickup.getTime() < now.getTime() + 15 * 60 * 1000) return false;
-  const pickupDay = taipeiParts(pickup);
-  const limit = taipeiParts(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+  const pickupDay = bangkokParts(pickup);
+  const limit = bangkokParts(new Date(now.getTime() + 24 * 60 * 60 * 1000));
   const pickupKey = pickupDay.year * 10000 + pickupDay.month * 100 + pickupDay.day;
   const limitKey = limit.year * 10000 + limit.month * 100 + limit.day;
   return pickupKey <= limitKey;
@@ -100,7 +110,7 @@ function exportRecord(record) {
 }
 
 function nextOrderNumber(app) {
-  const parts = taipeiParts(new Date());
+  const parts = bangkokParts(new Date());
   const prefix = "ORD-" + parts.year + pad(parts.month, 2) + pad(parts.day, 2) + "-";
   for (let i = 0; i < 20; i++) {
     const candidate = prefix + pad(Math.floor(Math.random() * 1000000), 6);
@@ -222,7 +232,7 @@ routerAdd(
 
     const store = findById(e.app, "stores", storeId);
     if (!store || store.get("status") !== "open") return fail(e, "store_closed");
-    const parts = taipeiParts(pickup);
+    const parts = bangkokParts(pickup);
     if (
       !pickupIsWithinOrderWindow(pickup, new Date()) ||
       parts.minute % 5 !== 0 ||

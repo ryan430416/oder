@@ -32,6 +32,10 @@ test("broken product images switch to the default meal image", () => {
   const image = {
     src: "https://example.com/missing.jpg",
     dataset: { defaultSrc: DEFAULT_PRODUCT_IMAGE },
+    removeAttribute() {},
+    setAttribute(name, value) {
+      if (name === "src") this.src = value;
+    },
     closest() {
       return null;
     },
@@ -98,7 +102,7 @@ test("cart loading does not display a false NT$0 total", () => {
 test("school pickup windows display time ranges only", () => {
   const labels = pickupSlotsForStore(
     { status: "open", service_periods: ["breakfast", "lunch", "afternoon_tea"] },
-    new Date("2026-08-27T08:00:00+08:00")
+    new Date("2026-08-27T08:00:00+07:00")
   ).map((slot) => slot.label);
   assert.deepEqual(labels, [
     "08:35–08:45",

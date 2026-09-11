@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { canCustomerCancel, canTransition } from "../js/order-status.js";
+import { campusDateTimeParts } from "../js/campus-time.js";
 import {
   adminConfigured,
   authFromHeader,
@@ -45,28 +46,20 @@ export function loginEmail(username) {
   return value.includes("@") ? value : `${value}@campus-order.test`;
 }
 
-function taipeiParts(date) {
-  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-  return {
-    year: shifted.getUTCFullYear(),
-    month: shifted.getUTCMonth() + 1,
-    day: shifted.getUTCDate(),
-    hour: shifted.getUTCHours(),
-    minute: shifted.getUTCMinutes(),
-    second: shifted.getUTCSeconds(),
-  };
+function bangkokParts(date) {
+  return campusDateTimeParts(date);
 }
 
 export function isServicePickupTime(date) {
-  const parts = taipeiParts(date);
+  const parts = bangkokParts(date);
   const minutes = parts.hour * 60 + parts.minute;
   return PICKUP_WINDOWS.some(([start, end]) => minutes >= start && minutes <= end);
 }
 
 export function pickupIsWithinOrderWindow(pickup, now) {
   if (pickup.getTime() < now.getTime() + 15 * 60 * 1000) return false;
-  const pickupDay = taipeiParts(pickup);
-  const limit = taipeiParts(new Date(now.getTime() + 24 * 60 * 60 * 1000));
+  const pickupDay = bangkokParts(pickup);
+  const limit = bangkokParts(new Date(now.getTime() + 24 * 60 * 60 * 1000));
   const pickupKey = pickupDay.year * 10000 + pickupDay.month * 100 + pickupDay.day;
   const limitKey = limit.year * 10000 + limit.month * 100 + limit.day;
   return pickupKey <= limitKey;
@@ -90,7 +83,7 @@ function pad(n, width) {
 }
 
 async function nextOrderNumber() {
-  const parts = taipeiParts(new Date());
+  const parts = bangkokParts(new Date());
   const prefix = `ORD-${parts.year}${pad(parts.month, 2)}${pad(parts.day, 2)}-`;
   for (let i = 0; i < 20; i += 1) {
     const candidate = prefix + pad(Math.floor(Math.random() * 1000000), 6);
@@ -201,7 +194,7 @@ async function createOrder(authorization, body) {
 
   const store = await findById("stores", storeId);
   if (!store || store.status !== "open") return fail("store_closed");
-  const parts = taipeiParts(pickup);
+  const parts = bangkokParts(pickup);
   if (
     !pickupIsWithinOrderWindow(pickup, new Date()) ||
     parts.minute % 5 !== 0 ||

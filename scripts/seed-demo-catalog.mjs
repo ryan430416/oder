@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { deflateSync } from "node:zlib";
 import { COLLECTION_RULES } from "../pocketbase/collection-rules.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -18,12 +19,46 @@ async function loadEnv() {
   return env;
 }
 
-function tinyPngBytes() {
-  // 1x1 PNG (opaque peach) for product image seed tests.
-  return Buffer.from(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
-    "base64"
-  );
+function crc32(buf) {
+  let c = ~0;
+  for (let i = 0; i < buf.length; i += 1) {
+    c ^= buf[i];
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? (0xedb88320 ^ (c >>> 1)) : c >>> 1;
+  }
+  return ~c >>> 0;
+}
+
+function pngChunk(type, data) {
+  const typeBuf = Buffer.from(type);
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])));
+  return Buffer.concat([len, typeBuf, data, crc]);
+}
+
+/** Solid 128×128 PNG so seed images are never 1×1. */
+function mealPngBytes(size = 128) {
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(size, 0);
+  ihdr.writeUInt32BE(size, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+  const row = Buffer.alloc(1 + size * 3);
+  for (let x = 0; x < size; x += 1) {
+    row[1 + x * 3] = 220;
+    row[2 + x * 3] = 140;
+    row[3 + x * 3] = 70;
+  }
+  const raw = Buffer.concat(Array.from({ length: size }, () => row));
+  const compressed = deflateSync(raw);
+  return Buffer.concat([
+    signature,
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", compressed),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
 }
 
 async function request(url, path, { method = "GET", token, body, form } = {}) {
@@ -169,7 +204,7 @@ await ensureProduct(url, token, closedStore.id, "隱藏餐點", {
 });
 
 const form = new FormData();
-form.append("image", new Blob([tinyPngBytes()], { type: "image/png" }), "meal.png");
+form.append("image", new Blob([mealPngBytes(128)], { type: "image/png" }), "meal.png");
 const upload = await request(url, `/api/collections/products/records/${withImage.id}`, {
   method: "PATCH",
   token,
