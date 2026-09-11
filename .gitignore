@@ -13,3 +13,4 @@ pocketbase/pb_data/
 pocketbase/pocketbase.exe
 pocketbase/pocketbase
 pocketbase/*.zip
+.vercel
