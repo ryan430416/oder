@@ -16,6 +16,7 @@ mountIcons();
 const menuEl = qs("#menu");
 const catsEl = qs("#cats");
 const statusEl = qs("#storeStatus");
+const storeDescEl = qs("#storeDesc");
 
 function refreshBadge() {
   const n = cart.count();
@@ -23,8 +24,20 @@ function refreshBadge() {
   qs("#cartCount").hidden = n === 0;
 }
 
+function showMenuLoading() {
+  storeDescEl.textContent = t("products_loading");
+  menuEl.setAttribute("aria-busy", "true");
+  menuEl.innerHTML = `
+    <div class="card skeleton" aria-hidden="true"></div>
+    <div class="card skeleton" aria-hidden="true"></div>
+    <div class="card skeleton" aria-hidden="true"></div>
+  `;
+  catsEl.innerHTML = "";
+}
+
 async function boot() {
-  menuEl.innerHTML = `<div class="card skeleton" aria-hidden="true"></div>`;
+  showMenuLoading();
+  hideBackendNotice(statusEl);
   try {
     const session = await auth.ensureCustomer();
     if (!session?.ok) throw new Error("anonymous_login_failed");
@@ -40,13 +53,15 @@ async function boot() {
     hideBackendNotice(statusEl);
     const lab = storeLabel(store);
     qs("#storeName").textContent = lab.name;
-    qs("#storeDesc").textContent = `${lab.desc} · ${schoolPickupWindowsLabel()}`;
+    storeDescEl.textContent = t("products_loading");
     const storeClosed = store.status !== "open";
     refreshBadge();
 
     const productResult = await api.getProducts(storeId);
-    if (!productResult.ok) throw new Error("backend_error");
+    if (!productResult.ok) throw new Error("products_load_failed");
     const products = productResult.data || [];
+    storeDescEl.textContent = `${lab.desc} · ${schoolPickupWindowsLabel()}`;
+    menuEl.removeAttribute("aria-busy");
     const ALL = "__all__";
     const cats = [ALL, ...new Set(products.map((p) => p.category))];
     let cat = ALL;
@@ -63,6 +78,10 @@ async function boot() {
 
     function drawMenu() {
       const rows = products.filter((p) => cat === ALL || p.category === cat);
+      if (!rows.length) {
+        menuEl.innerHTML = `<p class="empty">${escapeHtml(t("no_products"))}</p>`;
+        return;
+      }
       menuEl.innerHTML = rows
         .map((p) => {
           const sold = p.status !== "active" || storeClosed;
@@ -108,8 +127,16 @@ async function boot() {
     drawMenu();
   } catch (error) {
     menuEl.innerHTML = "";
+    menuEl.removeAttribute("aria-busy");
+    storeDescEl.textContent = "";
+    const code =
+      error?.message === "anonymous_login_failed"
+        ? "anonymous_login_failed"
+        : error?.message === "products_load_failed"
+          ? "products_load_failed"
+          : "stores_load_failed";
     renderBackendNotice(statusEl, {
-      code: error?.message === "anonymous_login_failed" ? "anonymous_login_failed" : "stores_load_failed",
+      code,
       busy: false,
       onRetry: () => boot(),
     });

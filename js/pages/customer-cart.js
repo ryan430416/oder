@@ -32,9 +32,12 @@ function showLoading() {
   hint.textContent = t("cart_updating");
   totalEl.textContent = cartTotalDisplay({ loading: true, money });
   setCheckoutEnabled(false);
-  if (!lines.dataset.ready) {
-    lines.innerHTML = `<div class="card skeleton" aria-hidden="true"></div>`;
-  }
+  delete lines.dataset.ready;
+  lines.setAttribute("aria-busy", "true");
+  lines.innerHTML = `
+    <div class="card skeleton" aria-hidden="true"></div>
+    <div class="card skeleton" aria-hidden="true"></div>
+  `;
 }
 
 function paintEmpty() {
@@ -42,6 +45,7 @@ function paintEmpty() {
   hint.textContent = t("cart_empty");
   lines.innerHTML = `<p class="empty">${t("cart_hint_empty")}</p>`;
   lines.dataset.ready = "1";
+  lines.removeAttribute("aria-busy");
   totalEl.textContent = cartTotalDisplay({ loading: false, empty: true, money });
   setCheckoutEnabled(false);
   setCartBadge(qs("#cartCount"));
@@ -82,6 +86,7 @@ function paintItems(cur, store, products, { error = false, code = "cart_load_fai
     })
     .join("");
   lines.dataset.ready = "1";
+  lines.removeAttribute("aria-busy");
   totalEl.textContent = cartTotalDisplay({ loading: false, total, money });
   setCartBadge(qs("#cartCount"));
   if (activeId) {

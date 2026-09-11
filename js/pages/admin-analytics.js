@@ -2,11 +2,11 @@ import { api } from "../api.js";
 import { money } from "../format.js";
 import { qs } from "../nav.js";
 import { t, storeLabel, statusLabel } from "../i18n.js";
-import { bootAdmin } from "../admin-boot.js";
+import { runAdminPage } from "../admin-boot.js";
 import { escapeHtml } from "../html.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
 
-if (!(await bootAdmin())) throw new Error("admin");
+await runAdminPage(async () => {
 
 const box = qs("#box");
 const statusEl = qs("#analyticsStatus");
@@ -59,3 +59,4 @@ async function render() {
 }
 
 render();
+});

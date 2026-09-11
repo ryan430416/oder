@@ -2,13 +2,13 @@ import { api } from "../api.js";
 import { money, formatTime, dateKey, formatDate } from "../format.js";
 import { qs } from "../nav.js";
 import { t, statusLabel, productLabel, storeLabel, gradeLabel } from "../i18n.js";
-import { bootAdmin } from "../admin-boot.js";
+import { runAdminPage } from "../admin-boot.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
 import { watchOrders } from "../order-filters.js";
 import { campusDateKey } from "../campus-time.js";
 
-if (!(await bootAdmin())) throw new Error("admin");
+await runAdminPage(async () => {
 
 const list = qs("#list");
 const day = qs("#day");
@@ -138,3 +138,4 @@ watchOrders(
 day.value = "";
 day.setAttribute("max", campusDateKey());
 render({ keepOnError: false });
+});

@@ -8,7 +8,13 @@ import { productImageHtml, productImageSrc, DEFAULT_PRODUCT_IMAGE } from "../js/
 import { applyProductImageFallback } from "../js/image-ui.js";
 import { pickupSlotsForStore } from "../js/format.js";
 import { schoolPickupWindowsLabel } from "../js/service-periods.js";
-import { cartCheckoutEnabled, cartTotalDisplay, createInflight, storeListPhase } from "../js/ui-state.js";
+import {
+  cartCheckoutEnabled,
+  cartTotalDisplay,
+  createInflight,
+  menuListPhase,
+  storeListPhase,
+} from "../js/ui-state.js";
 import { setLang, t } from "../js/i18n.js";
 
 const DATE_OR_DAY_RE = /今天|明天|today|tomorrow|\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}\/\d{1,2}/i;
@@ -60,6 +66,39 @@ test("store catalog distinguishes loading, empty, query failure, and auth failur
     }),
     "list"
   );
+});
+
+test("menu list distinguishes loading, empty, and PocketBase failure", () => {
+  assert.equal(menuListPhase({ loading: true, products: [] }), "loading");
+  assert.equal(menuListPhase({ loading: false, products: [] }), "empty");
+  assert.equal(menuListPhase({ loading: false, error: true, products: [] }), "error");
+  assert.equal(
+    menuListPhase({ loading: false, error: false, products: [{ product_id: "p1" }] }),
+    "list"
+  );
+});
+
+test("customer store page shows skeleton loading and retryable failure", async () => {
+  const html = await readFile(new URL("../customer/store.html", import.meta.url), "utf8");
+  const source = await readFile(new URL("../js/pages/customer-store.js", import.meta.url), "utf8");
+  assert.match(html, /products_loading/);
+  assert.match(html, /class="card skeleton"/);
+  assert.match(html, /aria-busy="true"/);
+  assert.match(source, /products_loading/);
+  assert.match(source, /products_load_failed/);
+  assert.match(source, /onRetry/);
+  assert.match(source, /showMenuLoading/);
+});
+
+test("cart keeps loading UI until PocketBase prices resolve", async () => {
+  const html = await readFile(new URL("../customer/cart.html", import.meta.url), "utf8");
+  const source = await readFile(new URL("../js/pages/customer-cart.js", import.meta.url), "utf8");
+  assert.match(html, /cart_updating/);
+  assert.match(html, /class="card skeleton"/);
+  assert.match(html, /aria-disabled="true"/);
+  assert.match(source, /showLoading\(\)/);
+  assert.match(source, /cartTotalDisplay\(\{ loading: true/);
+  assert.match(source, /setCheckoutEnabled\(false\)/);
 });
 
 test("retry helper ignores duplicate in-flight requests", async () => {
@@ -148,5 +187,7 @@ test("portal copy is translated in zh, en, th, and my", () => {
     assert.equal(t("cart_store", { name: "Central Cafe", id: "should-not-appear" }), t("cart_store", { name: "Central Cafe" }));
     assert.doesNotMatch(t("cart_store", { name: "Central Cafe", id: "uuid-here" }), /uuid-here/);
     assert.equal(t("cart_hint_empty").includes("請先選擇店家商品") || t("cart_hint_empty").length > 0, true);
+    assert.equal(t("products_loading").length > 0, true);
+    assert.equal(t("products_load_failed").length > 0, true);
   }
 });

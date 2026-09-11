@@ -33,6 +33,18 @@ export function storeListPhase({
   return "list";
 }
 
+/** Product menu list phase for customer store page. */
+export function menuListPhase({
+  loading = false,
+  error = false,
+  products = [],
+} = {}) {
+  if (loading && !products.length) return "loading";
+  if (error && !products.length) return "error";
+  if (!products.length) return "empty";
+  return "list";
+}
+
 export function cartTotalDisplay({ loading = false, total = 0, empty = false, money } = {}) {
   if (loading) return "";
   if (typeof money === "function") return money(empty ? 0 : total);

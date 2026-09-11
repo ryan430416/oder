@@ -1,13 +1,13 @@
 import { api } from "../api.js";
 import { qs } from "../nav.js";
 import { t } from "../i18n.js";
-import { bootAdmin } from "../admin-boot.js";
+import { runAdminPage } from "../admin-boot.js";
 import { formatTime } from "../format.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
 import { sanitizeAdminUser } from "../admin-data.js";
 
-if (!(await bootAdmin())) throw new Error("admin");
+await runAdminPage(async () => {
 
 const list = qs("#list");
 const msg = qs("#msg");
@@ -78,3 +78,4 @@ list.addEventListener("click", async (event) => {
 });
 
 render();
+});

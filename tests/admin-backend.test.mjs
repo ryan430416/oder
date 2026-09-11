@@ -93,11 +93,60 @@ test("admin orders keep cache on realtime errors and use Bangkok dates", async (
 
 test("delete-store refuses stores with orders in server handler", async () => {
   const source = await readFile(new URL("../server/app-handlers.js", import.meta.url), "utf8");
+  const deleteFn = source.slice(source.indexOf("async function deleteStore"), source.indexOf("async function disableStore"));
   assert.match(source, /store_has_orders/);
   assert.match(source, /admin_audit_logs/);
   assert.match(source, /disable-store/);
   assert.match(source, /enable-store/);
-  assert.doesNotMatch(source, /for \(const order of orders\) await deleteRecord\("orders"/);
+  assert.match(deleteFn, /if \(!isAdmin\(auth\.record\)\) return fail\("not_admin"\)/);
+  assert.match(deleteFn, /canPermanentlyDeleteStore/);
+  assert.match(deleteFn, /store_has_orders/);
+  assert.doesNotMatch(deleteFn, /deleteRecord\("orders"/);
+  assert.doesNotMatch(deleteFn, /deleteRecord\("order_items"/);
+});
+
+test("PocketBase hook delete-store mirrors no-order-only delete and not_admin", async () => {
+  const source = await readFile(new URL("../pocketbase/pb_hooks/main.pb.js", import.meta.url), "utf8");
+  assert.match(source, /\/api\/app\/delete-store/);
+  assert.match(source, /if \(!isAdmin\(e\.auth\)\) return fail\(e, "not_admin"\)/);
+  assert.match(source, /store_has_orders/);
+  assert.match(source, /\/api\/app\/disable-store/);
+  assert.doesNotMatch(source, /delete\(order/);
+});
+
+test("admin stores UI deletes only empty stores and archives stores with history", async () => {
+  const source = await readFile(new URL("../js/pages/admin-stores.js", import.meta.url), "utf8");
+  assert.match(source, /canPermanentlyDeleteStore/);
+  assert.match(source, /confirm_delete_store_safe/);
+  assert.match(source, /confirm_disable_store_history/);
+  assert.match(source, /api\.disableStore/);
+  assert.match(source, /api\.deleteStore/);
+  assert.match(source, /res\.ok \? t\("deleted_ok"\)/);
+  assert.match(source, /store_has_orders/);
+});
+
+test("admin and store pages end cleanly on session expiry without throwing", async () => {
+  const adminBoot = await readFile(new URL("../js/admin-boot.js", import.meta.url), "utf8");
+  const storeBoot = await readFile(new URL("../js/store-boot.js", import.meta.url), "utf8");
+  const dashboard = await readFile(new URL("../js/pages/admin-dashboard.js", import.meta.url), "utf8");
+  assert.match(adminBoot, /runAdminPage/);
+  assert.match(adminBoot, /if \(!session\) return null/);
+  assert.match(storeBoot, /runStorePage/);
+  assert.match(dashboard, /runAdminPage/);
+  assert.doesNotMatch(dashboard, /throw new Error\("admin"\)/);
+  for (const file of [
+    "admin-users.js",
+    "admin-orders.js",
+    "admin-analytics.js",
+    "admin-products.js",
+    "admin-stores.js",
+    "store-dashboard.js",
+    "store-menu.js",
+    "store-notifications.js",
+  ]) {
+    const source = await readFile(new URL(`../js/pages/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /throw new Error\("(admin|store)"\)/);
+  }
 });
 
 test("collection rules keep audit logs admin-only and stores undeletable by clients", async () => {

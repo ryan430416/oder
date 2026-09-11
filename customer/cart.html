@@ -20,9 +20,12 @@
     </div>
   </header>
   <main class="wrap">
-    <p class="sub" id="storeHint"></p>
+    <p class="sub" id="storeHint" data-i18n="cart_updating">正在更新購物車…</p>
     <div id="cartStatus" hidden></div>
-    <div class="grid" id="lines"></div>
+    <div class="grid" id="lines" aria-busy="true">
+      <div class="card skeleton" aria-hidden="true"></div>
+      <div class="card skeleton" aria-hidden="true"></div>
+    </div>
     <div class="total-bar"><span data-i18n="total">總金額</span><span id="total"></span></div>
     <a class="btn btn-block" id="goCheckout" href="checkout.html" aria-disabled="true" data-i18n="checkout">去結帳</a>
   </main>

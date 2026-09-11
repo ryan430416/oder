@@ -1,8 +1,9 @@
 import { auth } from "../auth.js";
 import { api } from "../api.js";
 import { money } from "../format.js";
-import { qs, goToPage } from "../nav.js";
-import { initI18n, t, productLabel, productDesc, categoryLabel } from "../i18n.js";
+import { qs } from "../nav.js";
+import { t, productLabel, productDesc, categoryLabel } from "../i18n.js";
+import { runStorePage } from "../store-boot.js";
 import { mountBell } from "../notify-ui.js";
 import { escapeAttr, escapeHtml, productImageHtml } from "../html.js";
 import {
@@ -14,9 +15,7 @@ import { mountImageUi } from "../image-ui.js";
 import { showToast } from "../toast.js";
 import { createInflight } from "../ui-state.js";
 
-initI18n();
-if (!(await auth.requireRole("store", "index.html"))) throw new Error("store");
-
+await runStorePage(async () => {
 const form = qs("#form");
 const list = qs("#list");
 const msg = qs("#msg");
@@ -34,10 +33,6 @@ const gate = createInflight();
 
 mountImageUi();
 mountBell(qs("#bellHost"), "notifications.html");
-qs("#logout").addEventListener("click", async () => {
-  await auth.logout();
-  goToPage("index.html");
-});
 
 function clearPreviewUrl() {
   if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -208,3 +203,4 @@ list.addEventListener("click", async (event) => {
 
 resetForm();
 await render();
+});

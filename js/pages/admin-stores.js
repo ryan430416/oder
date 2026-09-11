@@ -1,7 +1,7 @@
 import { api } from "../api.js";
 import { qs } from "../nav.js";
 import { t, storeLabel } from "../i18n.js";
-import { bootAdmin } from "../admin-boot.js";
+import { runAdminPage } from "../admin-boot.js";
 import { mountIconPick } from "../easy-pick.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { mountPasswordToggles } from "../password-toggle.js";
@@ -9,7 +9,7 @@ import { schoolPickupWindowsLabel } from "../service-periods.js";
 import { canPermanentlyDeleteStore } from "../admin-data.js";
 import { createInflight } from "../ui-state.js";
 
-if (!(await bootAdmin())) throw new Error("admin");
+await runAdminPage(async () => {
 mountPasswordToggles();
 
 const form = qs("#form");
@@ -231,3 +231,4 @@ list.addEventListener("click", async (e) => {
 
 setCreateMode();
 render();
+});

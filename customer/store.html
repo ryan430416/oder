@@ -20,10 +20,14 @@
     </div>
   </header>
   <main class="wrap">
-    <p class="sub" id="storeDesc"></p>
+    <p class="sub" id="storeDesc" data-i18n="products_loading">正在載入商品…</p>
     <div id="storeStatus" hidden></div>
     <div class="tabs" id="cats"></div>
-    <div class="grid" id="menu"></div>
+    <div class="grid" id="menu" aria-busy="true">
+      <div class="card skeleton" aria-hidden="true"></div>
+      <div class="card skeleton" aria-hidden="true"></div>
+      <div class="card skeleton" aria-hidden="true"></div>
+    </div>
   </main>
   <nav class="bottom-nav">
     <a href="index.html" data-i18n="nav_stores">店家</a>

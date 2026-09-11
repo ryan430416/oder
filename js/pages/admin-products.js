@@ -2,7 +2,7 @@ import { api } from "../api.js";
 import { money } from "../format.js";
 import { qs } from "../nav.js";
 import { t, storeLabel, productLabel, productDesc, categoryLabel } from "../i18n.js";
-import { bootAdmin } from "../admin-boot.js";
+import { runAdminPage } from "../admin-boot.js";
 import { escapeAttr, escapeHtml, productImageHtml } from "../html.js";
 import {
   deleteProductImage,
@@ -13,7 +13,7 @@ import { mountImageUi } from "../image-ui.js";
 import { showToast } from "../toast.js";
 import { createInflight } from "../ui-state.js";
 
-if (!(await bootAdmin())) throw new Error("admin");
+await runAdminPage(async () => {
 
 const pick = qs("#storePick");
 const form = qs("#form");
@@ -216,3 +216,4 @@ list.addEventListener("click", async (event) => {
 resetForm();
 await fillStores();
 await render();
+});
