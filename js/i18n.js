@@ -108,6 +108,7 @@ const dict = {
     tip_add_products: "請到餐點管理新增商品。",
     admin_ops_summary: "目前有 {stores} 間店家、{products} 項餐點、{orders} 筆訂單（今日 {today}）。",
     store_has_orders: "此店家已有歷史訂單，為保留紀錄只能停用。",
+    store_delete_locked: "已有歷史訂單，只能停用",
     store_delete_failed: "店家刪除失敗，原資料已保留。",
     store_disabled: "已停用",
     confirm_delete_store_safe:
@@ -432,6 +433,7 @@ const dict = {
     tip_add_products: "ไปที่จัดการเมนูเพื่อเพิ่มสินค้า",
     admin_ops_summary: "มีร้าน {stores} สินค้า {products} ออเดอร์ {orders} (วันนี้ {today})",
     store_has_orders: "ร้านนี้มีประวัติออเดอร์ ลบถาวรไม่ได้ ปิดใช้งานได้เท่านั้น",
+    store_delete_locked: "มีประวัติออเดอร์ ปิดใช้งานได้เท่านั้น",
     store_delete_failed: "ลบร้านไม่สำเร็จ ข้อมูลเดิมยังอยู่",
     store_disabled: "ปิดใช้งาน",
     confirm_delete_store_safe:
@@ -756,6 +758,7 @@ const dict = {
     tip_add_products: "မီနူးစီမံသို့ သွားပြီး ပစ္စည်းထည့်ပါ။",
     admin_ops_summary: "ဆိုင် {stores}၊ ပစ္စည်း {products}၊ အော်ဒါ {orders} (ယနေ့ {today})",
     store_has_orders: "ဤဆိုင်တွင် အော်ဒါမှတ်တမ်းရှိ၍ အပြီးမဖျက်နိုင်ပါ။ ပိတ်ရန်သာ လုပ်နိုင်သည်။",
+    store_delete_locked: "အော်ဒါမှတ်တမ်းရှိ၍ ပိတ်ရန်သာ လုပ်နိုင်သည်",
     store_delete_failed: "ဆိုင်ဖျက်မရပါ။ မူရင်းဒေတာ ဆက်ရှိသည်။",
     store_disabled: "ပိတ်ထားသည်",
     confirm_delete_store_safe:
@@ -1080,6 +1083,7 @@ const dict = {
     tip_add_products: "Go to menu management and add products.",
     admin_ops_summary: "{stores} stores, {products} products, {orders} orders ({today} today).",
     store_has_orders: "This store has order history and can only be disabled.",
+    store_delete_locked: "Has order history; disable only",
     store_delete_failed: "Store delete failed. Existing data was kept.",
     store_disabled: "Disabled",
     confirm_delete_store_safe:

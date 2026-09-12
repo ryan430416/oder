@@ -145,6 +145,25 @@ export const pocketbaseApi = {
     }
   },
 
+  async getStoreOrderCounts() {
+    const session = auth.getSession();
+    if (!session || session.role !== "admin") return { ok: false, code: "permission_denied", counts: {} };
+    try {
+      const client = await getPocketBase();
+      const rows = await client.collection("orders").getFullList({ fields: "id,store" });
+      const counts = {};
+      for (const row of rows) {
+        const storeId = String(row.store || "");
+        if (!storeId) continue;
+        counts[storeId] = (counts[storeId] || 0) + 1;
+      }
+      return { ok: true, counts };
+    } catch (error) {
+      console.error("PocketBase query failed", error?.status || "unknown");
+      return { ok: false, code: "backend_error", counts: {} };
+    }
+  },
+
   async getStore(storeId) {
     try {
       const client = await getPocketBase();

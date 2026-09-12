@@ -58,6 +58,8 @@ function statusBadge(status) {
 async function render() {
   const resets = await api.getPasswordResets();
   const stores = await loadStores();
+  const countsResult = await api.getStoreOrderCounts();
+  const countsKnown = Boolean(countsResult.ok);
   const resetIds = new Set(resets.map((r) => r.store_id));
   if (!stores.length) {
     list.innerHTML = `<p class="empty">${t("no_stores")}</p>`;
@@ -67,6 +69,11 @@ async function render() {
     .map((s) => {
       const lab = storeLabel(s);
       const active = s.status === "open";
+      const orders = countsKnown ? Number(countsResult.counts?.[s.store_id] || 0) : null;
+      const canDelete = countsKnown && orders === 0;
+      const deleteButton = canDelete
+        ? `<button class="btn btn-danger" type="button" data-del="${escapeAttr(s.store_id)}" data-orders="0">${escapeHtml(t("delete"))}</button>`
+        : `<button class="btn" type="button" disabled aria-disabled="true">${escapeHtml(t(countsKnown ? "store_delete_locked" : "backend_error"))}</button>`;
       return `
       <article class="card">
         <strong>${escapeHtml(s.image || "🏪")} ${escapeHtml(lab.name)}</strong>
@@ -81,7 +88,7 @@ async function render() {
           <button class="btn ${active ? "btn-danger" : ""}" type="button" data-toggle="${escapeAttr(s.store_id)}">${
             active ? t("disable_store") : t("enable_store")
           }</button>
-          <button class="btn btn-danger" type="button" data-del="${escapeAttr(s.store_id)}">${escapeHtml(t("delete"))}</button>
+          ${deleteButton}
         </div>
       </article>`;
     })
@@ -185,25 +192,14 @@ list.addEventListener("click", async (e) => {
     if (run?.skipped) return;
   }
   if (del) {
+    if (del.disabled || del.getAttribute("aria-disabled") === "true") return;
     const s = stores.find((x) => x.store_id === del.dataset.del);
-    if (!s) return;
+    if (!s || !canPermanentlyDeleteStore({ orders: Number(del.dataset.orders || 0) })) return;
     const run = await gate.run(async () => {
-      del.disabled = true;
       const impact = await api.getStoreImpact(s.store_id);
-      if (!impact.ok) {
-        msg.textContent = t(impact.code || "backend_error");
-        del.disabled = false;
-        return;
-      }
-      if (!canPermanentlyDeleteStore(impact)) {
+      if (!impact.ok || !canPermanentlyDeleteStore(impact)) {
         msg.textContent = t("store_has_orders");
-        if (confirm(t("confirm_disable_store_history", { name: storeLabel(s).name }))) {
-          const res = await api.disableStore(s.store_id);
-          msg.textContent = res.ok ? t("saved_ok") : t(res.code || "backend_error");
-          await render();
-        } else {
-          del.disabled = false;
-        }
+        await render();
         return;
       }
       if (
@@ -216,9 +212,9 @@ list.addEventListener("click", async (e) => {
           })
         )
       ) {
-        del.disabled = false;
         return;
       }
+      del.disabled = true;
       del.textContent = t("working");
       const res = await api.deleteStore(s.store_id);
       msg.textContent = res.ok ? t("deleted_ok") : t(res.code || "store_delete_failed");

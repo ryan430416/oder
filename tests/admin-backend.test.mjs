@@ -120,15 +120,15 @@ test("PocketBase hook delete-store mirrors no-order-only delete and not_admin", 
   assert.doesNotMatch(source, /delete\(order/);
 });
 
-test("admin stores UI deletes only empty stores and archives stores with history", async () => {
+test("admin stores disable delete when a store has historical orders", async () => {
   const source = await readFile(new URL("../js/pages/admin-stores.js", import.meta.url), "utf8");
-  assert.match(source, /canPermanentlyDeleteStore/);
+  assert.match(source, /getStoreOrderCounts/);
+  assert.match(source, /store_delete_locked/);
+  assert.match(source, /disabled aria-disabled="true"/);
+  assert.match(source, /data-orders="0"/);
+  assert.doesNotMatch(source, /confirm_disable_store_history/);
+  assert.match(source, /canPermanentlyDeleteStore\(impact\)/);
   assert.match(source, /confirm_delete_store_safe/);
-  assert.match(source, /confirm_disable_store_history/);
-  assert.match(source, /api\.disableStore/);
-  assert.match(source, /api\.deleteStore/);
-  assert.match(source, /res\.ok \? t\("deleted_ok"\)/);
-  assert.match(source, /store_has_orders/);
 });
 
 test("admin and store pages end cleanly on session expiry without throwing", async () => {

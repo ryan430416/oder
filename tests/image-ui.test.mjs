@@ -14,6 +14,7 @@ function fakeFile(bytes, type, size) {
   return {
     size: size ?? buffer.byteLength,
     type,
+    arrayBuffer: async () => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
     slice() {
       return {
         arrayBuffer: async () => buffer.slice().buffer,

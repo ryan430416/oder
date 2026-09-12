@@ -35,73 +35,39 @@ export function isRecordId(value) {
   return isUuid(text) || POCKETBASE_ID_PATTERN.test(text);
 }
 
-function byteAt(bytes, index) {
-  const value = bytes[index];
-  return typeof value === "number" ? value & 0xff : -1;
+function asUint8Array(bytes) {
+  if (bytes instanceof Uint8Array) return bytes;
+  if (bytes instanceof ArrayBuffer) return new Uint8Array(bytes);
+  if (ArrayBuffer.isView(bytes)) {
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  }
+  return new Uint8Array();
 }
 
-/** Copy exactly the requested bytes, including ArrayBuffer views with a non-zero byteOffset. */
-export function toByteArray(bytes, length = bytes?.byteLength || bytes?.length || 0) {
-  if (!bytes) return new Uint8Array();
-  if (bytes instanceof ArrayBuffer) {
-    return new Uint8Array(bytes.slice(0, length));
+function bytesEqual(bytes, offset, expected) {
+  if (bytes.length < offset + expected.length) return false;
+  for (let i = 0; i < expected.length; i += 1) {
+    if (bytes[offset + i] !== expected[i]) return false;
   }
-  if (ArrayBuffer.isView(bytes)) {
-    const view = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    return view.slice(0, length);
-  }
-  const copy = Uint8Array.from(bytes);
-  return copy.slice(0, length);
+  return true;
 }
+
+const PNG_SIGNATURE = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const RIFF = Uint8Array.from([0x52, 0x49, 0x46, 0x46]);
+const WEBP = Uint8Array.from([0x57, 0x45, 0x42, 0x50]);
 
 export function detectImageMime(bytes) {
-  const b = toByteArray(bytes, 16);
-  if (b.length >= 3 && byteAt(b, 0) === 0xff && byteAt(b, 1) === 0xd8 && byteAt(b, 2) === 0xff) {
-    return "image/jpeg";
-  }
-  if (
-    b.length >= 8 &&
-    byteAt(b, 0) === 0x89 &&
-    byteAt(b, 1) === 0x50 &&
-    byteAt(b, 2) === 0x4e &&
-    byteAt(b, 3) === 0x47 &&
-    byteAt(b, 4) === 0x0d &&
-    byteAt(b, 5) === 0x0a &&
-    byteAt(b, 6) === 0x1a &&
-    byteAt(b, 7) === 0x0a
-  ) {
-    return "image/png";
-  }
-  const text = (start, end) => String.fromCharCode(...b.subarray(start, end));
-  if (b.length >= 12 && text(0, 4) === "RIFF" && text(8, 12) === "WEBP") return "image/webp";
+  const b = asUint8Array(bytes);
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (bytesEqual(b, 0, PNG_SIGNATURE)) return "image/png";
+  if (bytesEqual(b, 0, RIFF) && bytesEqual(b, 8, WEBP)) return "image/webp";
   return "";
 }
 
-const GENERIC_DECLARED = new Set([
-  "",
-  "application/octet-stream",
-  "application/unknown",
-  "binary/octet-stream",
-  "application/x-download",
-]);
-
-function declaredAgrees(declared, actual) {
-  if (GENERIC_DECLARED.has(declared)) return true;
-  return declared === actual;
-}
-
 export async function readFileHeader(file, length = 16) {
-  const size = Math.min(length, Number(file?.size) || length);
-  if (file && typeof file.slice === "function") {
-    const part = file.slice(0, size);
-    if (part && typeof part.arrayBuffer === "function") {
-      return toByteArray(await part.arrayBuffer(), size);
-    }
-  }
-  if (file && typeof file.arrayBuffer === "function") {
-    return toByteArray(await file.arrayBuffer(), size);
-  }
-  return new Uint8Array();
+  if (!file || typeof file.arrayBuffer !== "function") return new Uint8Array();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return bytes.subarray(0, Math.min(length, bytes.length));
 }
 
 function normalizeDeclaredType(type) {
@@ -121,11 +87,11 @@ export function isUsableImageDimension(width, height) {
 export async function validateProductImage(file) {
   if (!file || !file.size) return { ok: false, code: "invalid_image_type" };
   if (file.size > IMAGE_LIMITS.sourceBytes) return { ok: false, code: "invalid_image_size" };
-  const header = await readFileHeader(file, 16);
-  const actualMime = detectImageMime(header);
-  if (!ALLOWED_MIME.has(actualMime)) return { ok: false, code: "invalid_image_type" };
   const declared = normalizeDeclaredType(file.type).split(";")[0].trim();
-  if (!declaredAgrees(declared, actualMime)) return { ok: false, code: "invalid_image_type" };
+  if (!ALLOWED_MIME.has(declared)) return { ok: false, code: "invalid_image_type" };
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const actualMime = detectImageMime(bytes);
+  if (actualMime !== declared) return { ok: false, code: "invalid_image_type" };
   return { ok: true, mime: actualMime };
 }
 
