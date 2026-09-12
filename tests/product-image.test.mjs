@@ -13,16 +13,19 @@ import {
   validateProductImage,
 } from "../js/product-image.js";
 
-function fakeFile(bytes, type, size) {
+function fakeFile(bytes, type, size, name = "photo.bin") {
   const buffer = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
   return {
+    name,
     size: size ?? buffer.byteLength,
     type,
-    slice() {
+    slice(start = 0, end = buffer.byteLength) {
+      const part = buffer.slice(start, end);
       return {
-        arrayBuffer: async () => buffer.slice().buffer,
+        arrayBuffer: async () => part.buffer.slice(part.byteOffset, part.byteOffset + part.byteLength),
       };
     },
+    arrayBuffer: async () => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
   };
 }
 
@@ -33,11 +36,45 @@ const storeId = "123e4567-e89b-42d3-a456-426614174000";
 const productId = "123e4567-e89b-42d3-a456-426614174001";
 
 test("JPEG PNG and WebP signatures are accepted even when file.type is empty or aliased", async () => {
+  const offsetJpeg = new Uint8Array(24);
+  offsetJpeg.set(jpeg, 4);
+  assert.equal(detectImageMime(offsetJpeg.subarray(4)), "image/jpeg");
   assert.equal((await validateProductImage(fakeFile(jpeg, ""))).ok, true);
   assert.equal((await validateProductImage(fakeFile(jpeg, "image/jpg"))).ok, true);
   assert.equal((await validateProductImage(fakeFile(jpeg, "image/jpeg"))).ok, true);
+  assert.equal((await validateProductImage(fakeFile(jpeg, "application/octet-stream"))).ok, true);
   assert.equal((await validateProductImage(fakeFile(png, "image/png"))).ok, true);
   assert.equal((await validateProductImage(fakeFile(webp, "image/webp"))).ok, true);
+});
+
+test("standard, EXIF, palette, and disguised images follow magic bytes", async () => {
+  const { photoSelectionResult } = await import("../js/admin-data.js");
+  const exif = Uint8Array.from([0xff, 0xd8, 0xff, 0xe1, 0, 16, 0x45, 0x78, 0x69, 0x66, 0, 0, 0, 0, 0, 0]);
+  const jfif = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46, 0, 1, 0, 0, 0, 0]);
+  const palette = Uint8Array.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52,
+    0, 0, 0, 1, 0, 0, 0, 1, 8, 3, 0, 0, 0,
+  ]);
+  assert.equal((await validateProductImage(fakeFile(jfif, "image/jpeg", undefined, "meal.jpg"))).ok, true);
+  assert.equal((await validateProductImage(fakeFile(exif, "image/jpeg", undefined, "exif.jpg"))).ok, true);
+  assert.equal((await validateProductImage(fakeFile(png, "image/png", undefined, "meal.png"))).mime, "image/png");
+  assert.equal((await validateProductImage(fakeFile(palette, "image/png", undefined, "palette.png"))).ok, true);
+  assert.equal((await validateProductImage(fakeFile(webp, "image/webp", undefined, "meal.webp"))).ok, true);
+  assert.equal((await validateProductImage(fakeFile(Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>"), "image/png", undefined, "fake.png"))).ok, false);
+  assert.equal((await validateProductImage(fakeFile(Buffer.from("<svg/>"), "image/svg+xml", undefined, "icon.svg"))).code, "invalid_image_type");
+  assert.equal(
+    (await validateProductImage(fakeFile(jpeg, "image/jpeg", IMAGE_LIMITS.sourceBytes + 1, "huge.jpg"))).code,
+    "invalid_image_size"
+  );
+  const failed = photoSelectionResult({ ok: false, code: "invalid_image_type" });
+  assert.equal(failed.retry, false);
+  assert.equal(failed.preview, false);
+  const recovered = photoSelectionResult(await validateProductImage(fakeFile(png, "image/png")));
+  assert.equal(recovered.preview, true);
+  assert.equal(recovered.remove, true);
+  assert.equal(recovered.retry, false);
+  assert.equal(recovered.message, "image_ready");
 });
 
 test("SVG HTML oversized and mismatched types are rejected", async () => {

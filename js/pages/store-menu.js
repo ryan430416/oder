@@ -14,6 +14,7 @@ import { saveProductWithImage } from "../product-save.js";
 import { mountImageUi } from "../image-ui.js";
 import { showToast } from "../toast.js";
 import { createInflight } from "../ui-state.js";
+import { photoSelectionResult } from "../admin-data.js";
 
 await runStorePage(async () => {
 const form = qs("#form");
@@ -69,17 +70,24 @@ function resetForm() {
 
 photoInput.addEventListener("change", async () => {
   clearPreviewUrl();
+  msg.textContent = "";
+  retryUpload.hidden = true;
   const file = photoInput.files[0];
-  if (!file) return showPreview(currentImagePath ? photoPreview.querySelector("img")?.src : "");
+  if (!file) {
+    showPreview("");
+    return;
+  }
   const validation = await validateProductImage(file);
-  if (!validation.ok) {
+  const next = photoSelectionResult(validation);
+  if (!next.preview) {
     photoInput.value = "";
-    msg.textContent = t(validation.code);
+    showPreview("");
+    msg.textContent = t(next.message);
     return;
   }
   previewUrl = URL.createObjectURL(file);
   showPreview(previewUrl, file.name);
-  msg.textContent = t("image_ready");
+  msg.textContent = t(next.message);
 });
 
 removePhoto.addEventListener("click", () => {
@@ -148,7 +156,7 @@ form.addEventListener("submit", async (event) => {
     }
     if (!result.ok) {
       msg.textContent = t(result.code || "image_upload_failed");
-      retryUpload.hidden = false;
+      retryUpload.hidden = !["image_upload_failed", "image_network_failed", "image_compress_failed", "storage_forbidden"].includes(result.code);
       return;
     }
     msg.textContent = t("saved_ok");

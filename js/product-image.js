@@ -35,24 +35,73 @@ export function isRecordId(value) {
   return isUuid(text) || POCKETBASE_ID_PATTERN.test(text);
 }
 
+function byteAt(bytes, index) {
+  const value = bytes[index];
+  return typeof value === "number" ? value & 0xff : -1;
+}
+
+/** Copy exactly the requested bytes, including ArrayBuffer views with a non-zero byteOffset. */
+export function toByteArray(bytes, length = bytes?.byteLength || bytes?.length || 0) {
+  if (!bytes) return new Uint8Array();
+  if (bytes instanceof ArrayBuffer) {
+    return new Uint8Array(bytes.slice(0, length));
+  }
+  if (ArrayBuffer.isView(bytes)) {
+    const view = new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    return view.slice(0, length);
+  }
+  const copy = Uint8Array.from(bytes);
+  return copy.slice(0, length);
+}
+
 export function detectImageMime(bytes) {
-  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
-  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  const b = toByteArray(bytes, 16);
+  if (b.length >= 3 && byteAt(b, 0) === 0xff && byteAt(b, 1) === 0xd8 && byteAt(b, 2) === 0xff) {
+    return "image/jpeg";
+  }
   if (
-    b[0] === 0x89 &&
-    b[1] === 0x50 &&
-    b[2] === 0x4e &&
-    b[3] === 0x47 &&
-    b[4] === 0x0d &&
-    b[5] === 0x0a &&
-    b[6] === 0x1a &&
-    b[7] === 0x0a
+    b.length >= 8 &&
+    byteAt(b, 0) === 0x89 &&
+    byteAt(b, 1) === 0x50 &&
+    byteAt(b, 2) === 0x4e &&
+    byteAt(b, 3) === 0x47 &&
+    byteAt(b, 4) === 0x0d &&
+    byteAt(b, 5) === 0x0a &&
+    byteAt(b, 6) === 0x1a &&
+    byteAt(b, 7) === 0x0a
   ) {
     return "image/png";
   }
-  const ascii = (start, end) => String.fromCharCode(...b.slice(start, end));
-  if (ascii(0, 4) === "RIFF" && ascii(8, 12) === "WEBP") return "image/webp";
+  const text = (start, end) => String.fromCharCode(...b.subarray(start, end));
+  if (b.length >= 12 && text(0, 4) === "RIFF" && text(8, 12) === "WEBP") return "image/webp";
   return "";
+}
+
+const GENERIC_DECLARED = new Set([
+  "",
+  "application/octet-stream",
+  "application/unknown",
+  "binary/octet-stream",
+  "application/x-download",
+]);
+
+function declaredAgrees(declared, actual) {
+  if (GENERIC_DECLARED.has(declared)) return true;
+  return declared === actual;
+}
+
+export async function readFileHeader(file, length = 16) {
+  const size = Math.min(length, Number(file?.size) || length);
+  if (file && typeof file.slice === "function") {
+    const part = file.slice(0, size);
+    if (part && typeof part.arrayBuffer === "function") {
+      return toByteArray(await part.arrayBuffer(), size);
+    }
+  }
+  if (file && typeof file.arrayBuffer === "function") {
+    return toByteArray(await file.arrayBuffer(), size);
+  }
+  return new Uint8Array();
 }
 
 function normalizeDeclaredType(type) {
@@ -72,11 +121,11 @@ export function isUsableImageDimension(width, height) {
 export async function validateProductImage(file) {
   if (!file || !file.size) return { ok: false, code: "invalid_image_type" };
   if (file.size > IMAGE_LIMITS.sourceBytes) return { ok: false, code: "invalid_image_size" };
-  const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const header = await readFileHeader(file, 16);
   const actualMime = detectImageMime(header);
   if (!ALLOWED_MIME.has(actualMime)) return { ok: false, code: "invalid_image_type" };
-  const declared = normalizeDeclaredType(file.type);
-  if (declared && declared !== actualMime) return { ok: false, code: "invalid_image_type" };
+  const declared = normalizeDeclaredType(file.type).split(";")[0].trim();
+  if (!declaredAgrees(declared, actualMime)) return { ok: false, code: "invalid_image_type" };
   return { ok: true, mime: actualMime };
 }
 

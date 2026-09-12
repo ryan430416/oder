@@ -73,6 +73,14 @@ export function photoFormVisibility({ hasPreview = false, uploadFailed = false }
   return {
     preview: Boolean(hasPreview),
     remove: Boolean(hasPreview),
-    retry: Boolean(uploadFailed),
+    retry: Boolean(uploadFailed) && Boolean(hasPreview),
   };
+}
+
+/** Clear the previous error before applying the newly selected file. */
+export function photoSelectionResult(validation) {
+  if (!validation?.ok) {
+    return { preview: false, remove: false, retry: false, message: validation?.code || "invalid_image_type" };
+  }
+  return { preview: true, remove: true, retry: false, message: "image_ready" };
 }

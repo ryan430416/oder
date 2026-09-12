@@ -11,12 +11,18 @@ import {
 } from "../js/admin-data.js";
 import { readFile } from "node:fs/promises";
 
-test("users failure vs empty are distinct page outcomes", async () => {
-  const source = await readFile(new URL("../js/pages/admin-users.js", import.meta.url), "utf8");
-  assert.match(source, /users_load_failed/);
-  assert.match(source, /no_users/);
-  assert.match(source, /!result\?\.ok/);
-  assert.match(source, /!users\.length/);
+test("admin users are loaded from oder_users by role, without a missing created sort", async () => {
+  const source = await readFile(new URL("../js/pocketbase-api.js", import.meta.url), "utf8");
+  const usersFn = source.slice(source.indexOf("async getAdminUsers"), source.indexOf("deleteUserAccount"));
+  assert.match(usersFn, /AUTH_COLLECTION/);
+  assert.match(usersFn, /role/);
+  assert.doesNotMatch(usersFn, /profiles/);
+  assert.doesNotMatch(usersFn, /sort: "-created"/);
+  assert.doesNotMatch(usersFn, /fields: "id,email,display_name,role,status,store,grade,created"/);
+  const page = await readFile(new URL("../js/pages/admin-users.js", import.meta.url), "utf8");
+  assert.match(page, /users_load_failed/);
+  assert.match(page, /no_users/);
+  assert.match(page, /!result\?\.ok/);
 });
 
 test("sanitizeAdminUser strips secrets", () => {

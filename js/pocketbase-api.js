@@ -69,20 +69,19 @@ function normalizeOrder(row) {
   };
 }
 
+function safeQueryLog(error) {
+  const status = error?.status || error?.response?.status || 0;
+  console.error("PocketBase query failed", status || "unknown");
+}
+
 function queryFailure(error, fallback = []) {
-  if (error) {
-    const status = error?.status || error?.response?.status || "";
-    const code = error?.data?.code || error?.response?.data?.code || error?.message || "backend_error";
-    console.error("PocketBase query failed", { status, code });
-  }
+  if (error) safeQueryLog(error);
   return fallback;
 }
 
 function queryErrorResult(error) {
-  const status = error?.status || error?.response?.status || 0;
-  const code = error?.data?.code || error?.response?.data?.code || "backend_error";
-  console.error("PocketBase query failed", { status, code });
-  return { ok: false, data: [], code: "backend_error", status, errorCode: code };
+  safeQueryLog(error);
+  return { ok: false, data: [], code: "backend_error" };
 }
 
 function productFileUrl(client, row, filename, thumb = "") {
@@ -141,7 +140,7 @@ export const pocketbaseApi = {
       const data = await client.collection("stores").getFullList({ sort: "created" });
       return { ok: true, data: data.map(normalizeStore) };
     } catch (error) {
-      console.error("PocketBase query failed", error);
+      console.error("PocketBase query failed", error?.status || "unknown");
       return { ok: false, data: [], code: "backend_error" };
     }
   },
@@ -152,7 +151,7 @@ export const pocketbaseApi = {
       const data = await client.collection("stores").getOne(storeId);
       return { ok: true, data: normalizeStore(data) };
     } catch (error) {
-      console.error("PocketBase query failed", error);
+      console.error("PocketBase query failed", error?.status || "unknown");
       return { ok: false, data: null, code: "backend_error" };
     }
   },
@@ -166,7 +165,7 @@ export const pocketbaseApi = {
       });
       return { ok: true, data: withProductUrls(client, data) };
     } catch (error) {
-      console.error("PocketBase query failed", error);
+      console.error("PocketBase query failed", error?.status || "unknown");
       return { ok: false, data: [], code: "backend_error" };
     }
   },
@@ -416,24 +415,24 @@ export const pocketbaseApi = {
         return { ok: false, data: [], code: viaApi.code === "not_admin" ? "permission_denied" : "users_load_failed" };
       }
     } catch {
-      /* fall through to client query */
+      /* fall through to the auth collection query */
     }
     try {
       const client = await getPocketBase();
-      // Avoid empty filter strings; page through instead of one giant full list when possible.
+      // oder_users has no created field. Sorting on it returns 400.
       const data = await client.collection(AUTH_COLLECTION).getFullList({
-        sort: "-created",
-        fields: "id,email,display_name,role,status,store,grade,created",
+        sort: "-id",
+        fields: "id,email,display_name,role,status,store,grade",
       });
       return { ok: true, data: data.map(sanitizeAdminUser).filter(Boolean) };
     } catch (error) {
-      // Retry without fields in case school schema lacks one of them (fields mistmatch → 400).
       try {
         const client = await getPocketBase();
-        const data = await client.collection(AUTH_COLLECTION).getFullList({ sort: "-created" });
+        const data = await client.collection(AUTH_COLLECTION).getFullList();
         return { ok: true, data: data.map(sanitizeAdminUser).filter(Boolean) };
       } catch (retryError) {
-        return queryErrorResult(retryError);
+        safeQueryLog(retryError || error);
+        return { ok: false, data: [], code: "users_load_failed" };
       }
     }
   },
@@ -547,10 +546,7 @@ export const pocketbaseApi = {
         },
       };
     } catch (error) {
-      console.error("PocketBase query failed", {
-        status: error?.status || "",
-        code: error?.data?.code || error?.message || "admin_stats",
-      });
+      console.error("PocketBase query failed", error?.status || "unknown");
       return { ok: false, data: null, code: "backend_error" };
     }
   },
