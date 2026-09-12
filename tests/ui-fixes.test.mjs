@@ -12,6 +12,7 @@ import {
   cartCheckoutEnabled,
   cartTotalDisplay,
   createInflight,
+  fetchListPhase,
   menuListPhase,
   storeListPhase,
 } from "../js/ui-state.js";
@@ -66,6 +67,49 @@ test("store catalog distinguishes loading, empty, query failure, and auth failur
     }),
     "list"
   );
+});
+
+test("customer orders and notices stay in loading until the query finishes", async () => {
+  assert.equal(fetchListPhase({ loading: true, loaded: false, count: 0 }), "loading");
+  assert.equal(fetchListPhase({ loading: false, error: true, loaded: false }), "error");
+  assert.equal(fetchListPhase({ loaded: true, count: 0 }), "empty");
+  assert.equal(fetchListPhase({ loaded: true, count: 2 }), "list");
+  assert.notEqual(fetchListPhase({ loading: true, loaded: false, count: 0 }), "empty");
+
+  const ordersHtml = await readFile(new URL("../customer/orders.html", import.meta.url), "utf8");
+  const ordersJs = await readFile(new URL("../js/pages/customer-orders.js", import.meta.url), "utf8");
+  const notesHtml = await readFile(new URL("../customer/notifications.html", import.meta.url), "utf8");
+  const notesJs = await readFile(new URL("../js/pages/notices.js", import.meta.url), "utf8");
+  assert.match(ordersHtml, /orders_loading/);
+  assert.match(ordersHtml, /class="card skeleton"/);
+  assert.match(ordersJs, /orders_load_failed/);
+  assert.match(ordersJs, /filterTabButton/);
+  assert.match(ordersJs, /hasLoaded/);
+  assert.match(ordersJs, /keepOnError/);
+  const filters = await readFile(new URL("../js/order-filters.js", import.meta.url), "utf8");
+  assert.match(filters, /aria-pressed/);
+  assert.match(notesHtml, /notices_loading/);
+  assert.match(notesJs, /notices_load_failed/);
+  assert.match(notesJs, /onRetry|data-retry-notices/);
+  assert.match(notesJs, /notice_empty/);
+  const emptyBeforeLoad = notesJs.indexOf("notices_loading") < notesJs.indexOf("notice_empty");
+  assert.equal(emptyBeforeLoad, true);
+});
+
+test("order items are loaded in one batched query, not once per order", async () => {
+  const source = await readFile(new URL("../js/pocketbase-api.js", import.meta.url), "utf8");
+  const query = source.slice(source.indexOf("async function orderQuery"), source.indexOf("export const pocketbaseApi"));
+  assert.match(query, /Promise\.all/);
+  assert.match(source, /order\.customer/);
+  assert.match(source, /order\.store/);
+  assert.doesNotMatch(query, /for \(const order of orders\)/);
+  const schema = await readFile(
+    new URL("../pocketbase/pb_migrations/1700000001_init_collections.js", import.meta.url),
+    "utf8"
+  );
+  assert.match(schema, /idx_order_items_order/);
+  assert.match(schema, /idx_orders_customer_created/);
+  assert.match(schema, /idx_notifications_user_created/);
 });
 
 test("menu list distinguishes loading, empty, and PocketBase failure", () => {
@@ -189,5 +233,8 @@ test("portal copy is translated in zh, en, th, and my", () => {
     assert.equal(t("cart_hint_empty").includes("請先選擇店家商品") || t("cart_hint_empty").length > 0, true);
     assert.equal(t("products_loading").length > 0, true);
     assert.equal(t("products_load_failed").length > 0, true);
+    assert.equal(t("orders_loading").length > 0, true);
+    assert.equal(t("notices_loading").length > 0, true);
+    assert.equal(t("notices_load_failed").length > 0, true);
   }
 });

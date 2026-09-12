@@ -241,6 +241,8 @@ const orders = await ensure("orders", {
   indexes: [
     "CREATE UNIQUE INDEX idx_orders_number ON orders (order_number)",
     "CREATE UNIQUE INDEX idx_orders_idempotency ON orders (customer, idempotency_key)",
+    "CREATE INDEX idx_orders_customer_created ON orders (customer, created)",
+    "CREATE INDEX idx_orders_store_created ON orders (store, created)",
   ],
 });
 
@@ -257,6 +259,7 @@ await ensure("order_items", {
     { name: "subtotal", type: "number", required: true, min: 0, onlyInt: true },
     ...autodate(),
   ],
+  indexes: ['CREATE INDEX idx_order_items_order ON order_items ("order")'],
 });
 
 await ensure("notifications", {
@@ -271,6 +274,10 @@ await ensure("notifications", {
     { name: "message", type: "text", required: true, max: 500 },
     { name: "is_read", type: "bool" },
     ...autodate(),
+  ],
+  indexes: [
+    "CREATE INDEX idx_notifications_user_created ON notifications (user, created)",
+    "CREATE INDEX idx_notifications_store_created ON notifications (store, created)",
   ],
 });
 
@@ -380,5 +387,38 @@ for (const [name, fieldNames] of Object.entries(integerFields)) {
   await updateCollection(url, token, collection.id, { fields });
   console.log(`integer ${name}`);
 }
+
+const QUERY_INDEXES = {
+  orders: [
+    "CREATE INDEX idx_orders_customer_created ON orders (customer, created)",
+    "CREATE INDEX idx_orders_store_created ON orders (store, created)",
+  ],
+  order_items: ['CREATE INDEX idx_order_items_order ON order_items ("order")'],
+  notifications: [
+    "CREATE INDEX idx_notifications_user_created ON notifications (user, created)",
+    "CREATE INDEX idx_notifications_store_created ON notifications (store, created)",
+  ],
+};
+collections = await listCollections(url, token);
+for (const [name, wanted] of Object.entries(QUERY_INDEXES)) {
+  const collection = byName()[name];
+  if (!collection) continue;
+  const full = await getCollection(url, token, collection.id);
+  const indexes = Array.isArray(full.indexes) ? full.indexes.slice() : [];
+  let changed = false;
+  for (const sql of wanted) {
+    const indexName = sql.match(/INDEX\s+(\S+)/i)?.[1];
+    if (indexName && indexes.some((item) => String(item).includes(indexName))) continue;
+    indexes.push(sql);
+    changed = true;
+  }
+  if (!changed) {
+    console.log(`indexes ${name} already present`);
+    continue;
+  }
+  await updateCollection(url, token, collection.id, { indexes });
+  console.log(`indexes ${name} updated`);
+}
+
 
 console.log("School PocketBase collections are ready.");

@@ -22,9 +22,14 @@
   <main class="wrap">
     <label for="day" class="muted" data-i18n="date_filter"></label>
     <input class="search" id="day" type="date" />
-    <div class="tabs" id="tabs"></div>
+    <div class="tabs" id="tabs" role="group" aria-label="訂單狀態"></div>
+    <p class="muted realtime-status" id="ordersLive" hidden></p>
     <div id="ordersStatus" hidden></div>
-    <div class="grid" id="list"></div>
+    <div class="grid" id="list" aria-busy="true">
+      <p class="empty" data-i18n="orders_loading">正在載入訂單…</p>
+      <div class="card skeleton" aria-hidden="true"></div>
+      <div class="card skeleton" aria-hidden="true"></div>
+    </div>
   </main>
   <nav class="bottom-nav">
     <a href="index.html" data-i18n="nav_stores">店家</a>

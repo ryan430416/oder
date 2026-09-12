@@ -12,6 +12,7 @@ const FRIENDLY_CODES = new Set([
   "permission_denied",
   "users_load_failed",
   "orders_load_failed",
+  "notices_load_failed",
   "analytics_load_failed",
   "store_has_orders",
   "store_delete_failed",

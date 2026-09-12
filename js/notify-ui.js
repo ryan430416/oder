@@ -6,7 +6,9 @@ import { mountIcons } from "./icons.js";
 export async function mountBell(host, pageHref) {
   if (!host) return;
   const render = async () => {
-    const notes = await api.getNotifications();
+    const result = await api.getNotifications();
+    if (!result?.ok) return;
+    const notes = result.data || [];
     const unread = notes.filter((n) => !n.read).length;
     host.innerHTML = `<a class="bell" href="${escapeAttr(pageHref)}" title="${escapeAttr(t("nav_notice"))}"><i data-lucide="bell"></i>${
       unread ? `<span class="cart-count">${unread}</span>` : ""

@@ -322,10 +322,17 @@ progress {
   cursor: pointer;
 }
 
-.tabs button.on {
+.tabs button.on,
+.tabs button[aria-pressed="true"] {
   background: var(--brand);
   color: #fff;
   border-color: var(--brand);
+  font-weight: 700;
+}
+
+.tabs button:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .row-actions {

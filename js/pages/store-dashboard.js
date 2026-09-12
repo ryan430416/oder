@@ -5,7 +5,7 @@ import { qs } from "../nav.js";
 import { t, statusLabel, productLabel, gradeLabel } from "../i18n.js";
 import { runStorePage } from "../store-boot.js";
 import { mountBell } from "../notify-ui.js";
-import { ORDER_FILTERS, watchOrders } from "../order-filters.js";
+import { ORDER_FILTERS, filterTabButton, watchOrders } from "../order-filters.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { canTransition } from "../order-status.js";
 
@@ -45,13 +45,18 @@ await runStorePage(async (session) => {
   tabs.before(realtimeStatus);
 
   function drawTabs() {
-    tabs.innerHTML = ORDER_FILTERS.map(
-      (g) => `<button type="button" data-g="${g.id}" class="${g.id === group ? "on" : ""}">${t(g.key)}</button>`
+    tabs.innerHTML = ORDER_FILTERS.map((g) =>
+      filterTabButton({ id: g.id, label: t(g.key), pressed: g.id === group, attr: "data-g" })
     ).join("");
   }
 
   async function render() {
-    const orders = await api.getStoreOrders();
+    const result = await api.getStoreOrders();
+    const orders = result?.ok ? result.data || [] : [];
+    if (!result?.ok) {
+      list.innerHTML = `<p class="empty">${t("orders_load_failed")}</p>`;
+      return;
+    }
     const g = ORDER_FILTERS.find((x) => x.id === group) || ORDER_FILTERS[0];
     let rows = orders.filter((o) => g.match(o.status));
     if (day.value) rows = rows.filter((o) => dateKey(o.created_at) === day.value);

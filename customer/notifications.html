@@ -19,7 +19,9 @@
   </header>
   <main class="wrap">
     <div id="noticeStatus" hidden></div>
-    <div class="grid" id="list"></div>
+    <div class="grid" id="list" aria-busy="true">
+      <p class="empty" data-i18n="notices_loading">正在載入通知…</p>
+    </div>
   </main>
   <script type="module" src="../js/pages/customer-notifications.js"></script>
 </body>

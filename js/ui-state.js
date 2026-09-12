@@ -45,6 +45,15 @@ export function menuListPhase({
   return "list";
 }
 
+/** Do not treat an in-flight fetch as empty. */
+export function fetchListPhase({ loading = false, error = false, loaded = false, count = 0 } = {}) {
+  if (!loaded && loading) return "loading";
+  if (!loaded && error) return "error";
+  if (!loaded) return "loading";
+  if (count === 0) return "empty";
+  return "list";
+}
+
 export function cartTotalDisplay({ loading = false, total = 0, empty = false, money } = {}) {
   if (loading) return "";
   if (typeof money === "function") return money(empty ? 0 : total);

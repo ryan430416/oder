@@ -1,4 +1,5 @@
 import { getPocketBase } from "./pocketbase.js";
+import { escapeAttr, escapeHtml } from "./html.js";
 
 /** 顧客／店家共用同一組狀態分頁 */
 export const ORDER_FILTERS = [
@@ -10,6 +11,11 @@ export const ORDER_FILTERS = [
   { id: "completed", key: "status_completed", match: (s) => s === "completed" },
   { id: "cancelled", key: "status_cancelled", match: (s) => s === "cancelled" || s === "rejected" },
 ];
+
+export function filterTabButton({ id, label, pressed, attr = "data-f" }) {
+  const on = pressed ? "on" : "";
+  return `<button type="button" ${attr}="${escapeAttr(id)}" class="${on}" aria-pressed="${pressed ? "true" : "false"}">${escapeHtml(label)}</button>`;
+}
 
 export function watchOrders(onChange, onStatus = () => {}) {
   const run = () => onChange();

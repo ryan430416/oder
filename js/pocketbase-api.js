@@ -102,27 +102,35 @@ function withProductUrls(client, rows) {
   });
 }
 
+export function orderItemsFilter(column) {
+  if (column === "customer") return "order.customer = {:value}";
+  if (column === "store") return "order.store = {:value}";
+  return "";
+}
+
+export function groupItemsByOrder(items) {
+  const byOrder = new Map();
+  for (const item of items || []) {
+    const orderId = item.order || item.order_id || "";
+    if (!orderId) continue;
+    if (!byOrder.has(orderId)) byOrder.set(orderId, []);
+    byOrder.get(orderId).push(item);
+  }
+  return byOrder;
+}
+
 async function orderQuery(column, value) {
   const client = await getPocketBase();
-  const options = { sort: "-created" };
-  if (column && value) options.filter = client.filter(`${column} = {:value}`, { value });
-  const orders = await client.collection("orders").getFullList(options);
-  if (!orders.length) return [];
-  const byOrder = new Map();
-  for (const order of orders) {
-    try {
-      const items = await client.collection("order_items").getFullList({
-        filter: client.filter("order = {:id}", { id: order.id }),
-      });
-      byOrder.set(order.id, items);
-    } catch (error) {
-      console.error("PocketBase query failed", {
-        status: error?.status || "",
-        code: error?.data?.code || error?.message || "order_items",
-      });
-      byOrder.set(order.id, []);
-    }
-  }
+  const orderOptions = { sort: "-created" };
+  if (column && value) orderOptions.filter = client.filter(`${column} = {:value}`, { value });
+  const itemOptions = {};
+  const itemFilter = orderItemsFilter(column);
+  if (itemFilter && value) itemOptions.filter = client.filter(itemFilter, { value });
+  const [orders, items] = await Promise.all([
+    client.collection("orders").getFullList(orderOptions),
+    client.collection("order_items").getFullList(itemOptions),
+  ]);
+  const byOrder = groupItemsByOrder(items);
   return orders.map((order) => normalizeOrder({ ...order, items: byOrder.get(order.id) || [] }));
 }
 
@@ -180,21 +188,21 @@ export const pocketbaseApi = {
 
   async getCustomerOrders() {
     const current = auth.getSession();
-    if (!current) return [];
+    if (!current) return { ok: false, data: [], code: "session_expired" };
     try {
-      return await orderQuery("customer", current.user_id);
+      return { ok: true, data: await orderQuery("customer", current.user_id) };
     } catch (error) {
-      return queryFailure(error);
+      return queryErrorResult(error);
     }
   },
 
   async getStoreOrders() {
     const storeId = auth.getBoundStoreId();
-    if (!storeId) return [];
+    if (!storeId) return { ok: false, data: [], code: "no_store" };
     try {
-      return await orderQuery("store", storeId);
+      return { ok: true, data: await orderQuery("store", storeId) };
     } catch (error) {
-      return queryFailure(error);
+      return queryErrorResult(error);
     }
   },
 
@@ -214,17 +222,21 @@ export const pocketbaseApi = {
       const client = await getPocketBase();
       const data = await client.collection("notifications").getFullList({
         sort: "-created",
+        fields: "id,user,store,order,type,message,is_read,created",
       });
-      return data.slice(0, 100).map((item) => ({
-        ...item,
-        notification_id: item.id,
-        key: item.type,
-        read: item.is_read,
-        created_at: item.created_at || item.created,
-        vars: { message: item.message },
-      }));
+      return {
+        ok: true,
+        data: data.slice(0, 100).map((item) => ({
+          ...item,
+          notification_id: item.id,
+          key: item.type,
+          read: item.is_read,
+          created_at: item.created_at || item.created,
+          vars: { message: item.message },
+        })),
+      };
     } catch (error) {
-      return queryFailure(error);
+      return queryErrorResult(error);
     }
   },
 

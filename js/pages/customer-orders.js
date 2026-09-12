@@ -4,10 +4,10 @@ import { money, formatTime, dateKey, formatDate } from "../format.js";
 import { qs } from "../nav.js";
 import { initI18n, t, statusLabel, productLabel, gradeLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
-import { ORDER_FILTERS, watchOrders } from "../order-filters.js";
+import { ORDER_FILTERS, filterTabButton, watchOrders } from "../order-filters.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { canCustomerCancel } from "../order-status.js";
-import { createInflight } from "../ui-state.js";
+import { createInflight, fetchListPhase } from "../ui-state.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
 import { shouldQueryCustomerData } from "../guest-session.js";
 
@@ -21,10 +21,17 @@ const gate = createInflight();
 let session = null;
 let realtimeStarted = false;
 let filter = "all";
+let cachedOrders = [];
+let hasLoaded = false;
+let loading = false;
+let liveState = "connecting";
 
-const realtimeStatus = document.createElement("p");
+const realtimeStatus = qs("#ordersLive") || document.createElement("p");
 realtimeStatus.className = "muted realtime-status";
-tabs.before(realtimeStatus);
+if (!realtimeStatus.id) {
+  realtimeStatus.id = "ordersLive";
+  tabs.before(realtimeStatus);
+}
 
 const createdOrder = new URLSearchParams(location.search).get("created");
 if (createdOrder) {
@@ -54,20 +61,24 @@ function timeline(status) {
 }
 
 function drawTabs() {
-  tabs.innerHTML = ORDER_FILTERS.map(
-    (f) => `<button type="button" data-f="${f.id}" class="${f.id === filter ? "on" : ""}">${t(f.key)}</button>`
+  tabs.innerHTML = ORDER_FILTERS.map((f) =>
+    filterTabButton({ id: f.id, label: t(f.key), pressed: f.id === filter })
   ).join("");
 }
 
-async function render() {
-  if (!session) {
-    list.innerHTML = "";
-    return;
-  }
-  const orders = await api.getCustomerOrders(session.user_id);
-  const rows = orders.filter(match);
+function showOrdersLoading() {
+  list.setAttribute("aria-busy", "true");
+  list.innerHTML = `
+    <p class="empty">${escapeHtml(t("orders_loading"))}</p>
+    <div class="card skeleton" aria-hidden="true"></div>
+    <div class="card skeleton" aria-hidden="true"></div>
+  `;
+}
+
+function paintOrders(rows) {
+  list.removeAttribute("aria-busy");
   if (!rows.length) {
-    list.innerHTML = `<p class="empty">${t("no_orders")}</p>`;
+    list.innerHTML = `<p class="empty">${escapeHtml(t("no_orders"))}</p>`;
     return;
   }
   let html = "";
@@ -75,7 +86,7 @@ async function render() {
   rows.forEach((o) => {
     const dk = dateKey(o.created_at);
     if (dk !== lastDay) {
-      html += `<h3 class="page-title">${formatDate(o.created_at)}</h3>`;
+      html += `<h3 class="page-title">${escapeHtml(formatDate(o.created_at))}</h3>`;
       lastDay = dk;
     }
     html += `
@@ -88,19 +99,70 @@ async function render() {
       <div class="muted">${escapeHtml(t("grade_label", { grade: gradeLabel(o.customer_grade || session.grade) }))}</div>
       <div class="muted">${escapeHtml(t("pickup_at", { time: formatTime(o.pickup_time), amount: money(o.total) }))}</div>
       ${timeline(o.status)}
-      <ul class="item-list">${o.items.map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}</li>`).join("")}</ul>
+      <ul class="item-list">${(o.items || []).map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}</li>`).join("")}</ul>
       ${canCustomerCancel(o.status) ? `<div class="row-actions"><button class="btn btn-danger" type="button" data-cancel="${escapeAttr(o.order_id)}">${escapeHtml(t("cancel_order"))}</button></div>` : ""}
     </article>`;
   });
   list.innerHTML = html;
 }
 
+function paintFromCache() {
+  paintOrders(cachedOrders.filter(match));
+}
+
+async function render({ keepOnError = true } = {}) {
+  if (!session) {
+    list.innerHTML = "";
+    list.removeAttribute("aria-busy");
+    return;
+  }
+  if (loading) return;
+  loading = true;
+  const phase = fetchListPhase({ loading: true, loaded: hasLoaded, count: cachedOrders.length });
+  if (phase === "loading") showOrdersLoading();
+  hideBackendNotice(statusEl);
+  try {
+    const result = await api.getCustomerOrders();
+    if (!result?.ok) {
+      if (!keepOnError || !hasLoaded) {
+        cachedOrders = [];
+        hasLoaded = false;
+        list.innerHTML = "";
+        list.removeAttribute("aria-busy");
+      }
+      renderBackendNotice(statusEl, {
+        code: result?.code === "session_expired" ? "session_expired" : "orders_load_failed",
+        onRetry: () => render({ keepOnError: false }),
+      });
+      return;
+    }
+    cachedOrders = result.data || [];
+    hasLoaded = true;
+    paintFromCache();
+  } catch {
+    if (!keepOnError || !hasLoaded) {
+      list.innerHTML = "";
+      list.removeAttribute("aria-busy");
+    }
+    renderBackendNotice(statusEl, {
+      code: "orders_load_failed",
+      onRetry: () => render({ keepOnError: false }),
+    });
+  } finally {
+    loading = false;
+  }
+}
+
 async function boot() {
   const run = await gate.run(async () => {
-    list.innerHTML = "";
+    showOrdersLoading();
+    hideBackendNotice(statusEl);
     const result = await auth.ensureCustomer();
     if (!shouldQueryCustomerData(result)) {
       session = null;
+      hasLoaded = false;
+      list.innerHTML = "";
+      list.removeAttribute("aria-busy");
       renderBackendNotice(statusEl, {
         code: result?.code || "anonymous_login_failed",
         busy: gate.busy,
@@ -112,13 +174,21 @@ async function boot() {
     hideBackendNotice(statusEl);
     mountBell(qs("#bellHost"), "notifications.html");
     drawTabs();
-    await render();
+    await render({ keepOnError: false });
     if (!realtimeStarted) {
       realtimeStarted = true;
-      watchOrders(render, (status) => {
-        realtimeStatus.textContent = t(`realtime_${status}`);
-      });
-      setInterval(render, 5000);
+      watchOrders(
+        () => render({ keepOnError: true }),
+        (status) => {
+          liveState = status;
+          realtimeStatus.hidden = false;
+          realtimeStatus.textContent = t(`realtime_${status}`);
+        }
+      );
+      setInterval(() => {
+        if (liveState === "connected" || !session) return;
+        render({ keepOnError: true });
+      }, 8000);
     }
   });
   if (run?.skipped) return;
@@ -126,14 +196,14 @@ async function boot() {
 
 tabs.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-f]");
-  if (!btn || !session) return;
+  if (!btn || !session || !hasLoaded) return;
   filter = btn.dataset.f;
   drawTabs();
-  render();
+  paintFromCache();
 });
 
 day.addEventListener("change", () => {
-  if (session) render();
+  if (session && hasLoaded) paintFromCache();
 });
 
 list.addEventListener("click", async (e) => {
@@ -142,7 +212,7 @@ list.addEventListener("click", async (e) => {
   if (!confirm(t("cancel_confirm"))) return;
   const res = await api.cancelOrder(btn.dataset.cancel);
   if (!res.ok) alert(t(res.code || "cannot_cancel"));
-  render();
+  render({ keepOnError: true });
 });
 
 boot();

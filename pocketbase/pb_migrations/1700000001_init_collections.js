@@ -244,6 +244,7 @@ migrate((app) => {
       { name: "subtotal", type: "number", required: true, min: 0, onlyInt: true },
       ...autodateFields(),
     ],
+    indexes: ["CREATE INDEX idx_order_items_order ON order_items (\"order\")"],
   });
   app.save(orderItems);
 
