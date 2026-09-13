@@ -44,30 +44,63 @@ function asUint8Array(bytes) {
   return new Uint8Array();
 }
 
-function bytesEqual(bytes, offset, expected) {
-  if (bytes.length < offset + expected.length) return false;
-  for (let i = 0; i < expected.length; i += 1) {
-    if (bytes[offset + i] !== expected[i]) return false;
-  }
-  return true;
+function byteAt(bytes, index) {
+  const value = bytes[index];
+  return typeof value === "number" ? value : Number.NaN;
 }
 
-const PNG_SIGNATURE = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const RIFF = Uint8Array.from([0x52, 0x49, 0x46, 0x46]);
-const WEBP = Uint8Array.from([0x57, 0x45, 0x42, 0x50]);
-
 export function detectImageMime(bytes) {
-  const b = asUint8Array(bytes);
-  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
-  if (bytesEqual(b, 0, PNG_SIGNATURE)) return "image/png";
-  if (bytesEqual(b, 0, RIFF) && bytesEqual(b, 8, WEBP)) return "image/webp";
+  const view = asUint8Array(bytes);
+  if (byteAt(view, 0) === 0xff && byteAt(view, 1) === 0xd8 && byteAt(view, 2) === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    byteAt(view, 0) === 0x89 &&
+    byteAt(view, 1) === 0x50 &&
+    byteAt(view, 2) === 0x4e &&
+    byteAt(view, 3) === 0x47 &&
+    byteAt(view, 4) === 0x0d &&
+    byteAt(view, 5) === 0x0a &&
+    byteAt(view, 6) === 0x1a &&
+    byteAt(view, 7) === 0x0a
+  ) {
+    return "image/png";
+  }
+  if (
+    byteAt(view, 0) === 0x52 &&
+    byteAt(view, 1) === 0x49 &&
+    byteAt(view, 2) === 0x46 &&
+    byteAt(view, 3) === 0x46 &&
+    byteAt(view, 8) === 0x57 &&
+    byteAt(view, 9) === 0x45 &&
+    byteAt(view, 10) === 0x42 &&
+    byteAt(view, 11) === 0x50
+  ) {
+    return "image/webp";
+  }
   return "";
 }
 
 export async function readFileHeader(file, length = 16) {
-  if (!file || typeof file.arrayBuffer !== "function") return new Uint8Array();
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  return bytes.subarray(0, Math.min(length, bytes.length));
+  if (!file || typeof file.slice !== "function") return new Uint8Array();
+  const size = Math.min(16, Math.max(0, Number(length) || 16));
+  const header = await file.slice(0, size).arrayBuffer();
+  if (!(header instanceof ArrayBuffer)) return new Uint8Array();
+  return new Uint8Array(header);
+}
+
+export async function validateImageSignature(file) {
+  try {
+    if (!file || typeof file.slice !== "function" || !Number(file.size)) {
+      return { ok: false, code: "invalid_image_type" };
+    }
+    const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+    const mime = detectImageMime(bytes);
+    if (!mime) return { ok: false, code: "invalid_image_type" };
+    return { ok: true, mime };
+  } catch {
+    return { ok: false, code: "invalid_image_type" };
+  }
 }
 
 function normalizeDeclaredType(type) {
@@ -89,10 +122,9 @@ export async function validateProductImage(file) {
   if (file.size > IMAGE_LIMITS.sourceBytes) return { ok: false, code: "invalid_image_size" };
   const declared = normalizeDeclaredType(file.type).split(";")[0].trim();
   if (!ALLOWED_MIME.has(declared)) return { ok: false, code: "invalid_image_type" };
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const actualMime = detectImageMime(bytes);
-  if (actualMime !== declared) return { ok: false, code: "invalid_image_type" };
-  return { ok: true, mime: actualMime };
+  const signature = await validateImageSignature(file);
+  if (!signature.ok || signature.mime !== declared) return { ok: false, code: "invalid_image_type" };
+  return { ok: true, mime: signature.mime };
 }
 
 function canvasBlob(canvas, quality) {

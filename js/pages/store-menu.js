@@ -72,12 +72,20 @@ photoInput.addEventListener("change", async () => {
   clearPreviewUrl();
   msg.textContent = "";
   retryUpload.hidden = true;
-  const file = photoInput.files[0];
+  const file = photoInput.files?.[0];
   if (!file) {
     showPreview("");
     return;
   }
-  const validation = await validateProductImage(file);
+  let validation;
+  try {
+    validation = await validateProductImage(file);
+  } catch {
+    photoInput.value = "";
+    showPreview("");
+    msg.textContent = t("invalid_image_type");
+    return;
+  }
   const next = photoSelectionResult(validation);
   if (!next.preview) {
     photoInput.value = "";

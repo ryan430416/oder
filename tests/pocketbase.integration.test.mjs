@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { isolatedPocketBaseUrl } from "./pocketbase-test-env.mjs";
 
-const url = (process.env.POCKETBASE_URL || "").replace(/\/$/, "");
+const url = isolatedPocketBaseUrl();
 const integration = url ? test : test.skip;
 
 integration("PocketBase health endpoint is reachable", async () => {

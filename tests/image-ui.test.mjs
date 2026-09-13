@@ -15,9 +15,10 @@ function fakeFile(bytes, type, size) {
     size: size ?? buffer.byteLength,
     type,
     arrayBuffer: async () => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
-    slice() {
+    slice(start = 0, end = buffer.length) {
+      const copy = new Uint8Array(buffer.subarray(start, end));
       return {
-        arrayBuffer: async () => buffer.slice().buffer,
+        arrayBuffer: async () => copy.buffer.slice(copy.byteOffset, copy.byteOffset + copy.byteLength),
       };
     },
   };

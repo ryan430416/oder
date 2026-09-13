@@ -1,8 +1,9 @@
-import test from "node:test";
+import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isolatedPocketBaseUrl } from "./pocketbase-test-env.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -23,14 +24,49 @@ async function loadEnv() {
   }
 }
 
-const env = await loadEnv();
-const url = (env.POCKETBASE_URL || process.env.POCKETBASE_URL || "").replace(/\/$/, "");
-const email = env.POCKETBASE_ADMIN_EMAIL || process.env.POCKETBASE_ADMIN_EMAIL || "";
-const password = env.POCKETBASE_ADMIN_PASSWORD || process.env.POCKETBASE_ADMIN_PASSWORD || "";
+const fileEnv = await loadEnv();
+const url = isolatedPocketBaseUrl({
+  ...process.env,
+  ...fileEnv,
+  POCKETBASE_TEST_URL: process.env.POCKETBASE_TEST_URL || fileEnv.POCKETBASE_TEST_URL || "",
+});
+const email = process.env.POCKETBASE_TEST_ADMIN_EMAIL || fileEnv.POCKETBASE_TEST_ADMIN_EMAIL || "";
+const password = process.env.POCKETBASE_TEST_ADMIN_PASSWORD || fileEnv.POCKETBASE_TEST_ADMIN_PASSWORD || "";
 const integration = url && email && password ? test : test.skip;
 if (url) process.env.POCKETBASE_URL = url;
-if (email) process.env.POCKETBASE_ADMIN_EMAIL = email;
-if (password) process.env.POCKETBASE_ADMIN_PASSWORD = password;
+const created = { users: new Set(), stores: new Set(), products: new Set(), orders: new Set() };
+
+function testPrefix(label) {
+  return `${label}_${Date.now().toString(36)}_${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function track(kind, id) {
+  if (id) created[kind].add(id);
+}
+
+async function deleteTracked(token) {
+  const groups = [
+    ["orders", created.orders],
+    ["products", created.products],
+    ["oder_users", created.users],
+    ["stores", created.stores],
+  ];
+  for (const [collection, ids] of groups) {
+    for (const id of ids) {
+      await request(`/api/collections/${collection}/records/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: token },
+      }).catch(() => {});
+    }
+    ids.clear();
+  }
+}
+
+afterEach(async () => {
+  if (!url || !email || !password) return;
+  const token = await superuser().catch(() => "");
+  if (token) await deleteTracked(token);
+});
 
 async function request(path, options = {}) {
   const response = await fetch(`${url}${path}`, {
@@ -70,7 +106,7 @@ integration("unauthenticated writes are rejected", async () => {
 
 integration("customer cannot escalate role, bind a store, or rewrite order totals", async () => {
   const token = await superuser();
-  const guestEmail = `rulecheck_${Date.now()}@campus-order.test`;
+  const guestEmail = `${testPrefix("rulecheck")}@campus-order.test`;
   const created = await request("/api/collections/oder_users/records", {
     method: "POST",
     headers: { Authorization: token },
@@ -84,6 +120,7 @@ integration("customer cannot escalate role, bind a store, or rewrite order total
       display_name: "規則測試",
     }),
   });
+  track("users", created.data?.id);
   assert.equal(created.ok, true, JSON.stringify(created.data));
   const auth = await request("/api/collections/oder_users/auth-with-password", {
     method: "POST",
@@ -127,8 +164,8 @@ integration("customer cannot escalate role, bind a store, or rewrite order total
 });
 
 integration("frontend guests can create a customer without a superuser token", async () => {
-  const id = crypto.randomUUID().replace(/-/g, "");
-  const email = `guest_${id}@campus-order.test`;
+  const id = testPrefix("guest");
+  const email = `${id}@campus-order.test`;
   const password = `${id}Aa1`;
   const created = await request("/api/collections/oder_users/records", {
     method: "POST",
@@ -142,10 +179,11 @@ integration("frontend guests can create a customer without a superuser token", a
     }),
   });
   assert.equal(created.ok, true, JSON.stringify(created.data));
+  track("users", created.data.id);
   const asAdmin = await request("/api/collections/oder_users/records", {
     method: "POST",
     body: JSON.stringify({
-      email: `admintry_${id}@campus-order.test`,
+      email: `${testPrefix("admintry")}@campus-order.test`,
       password,
       passwordConfirm: password,
       role: "admin",
@@ -187,6 +225,7 @@ integration("trusted guest-login issues an oder_users token", async () => {
   const { handleAppAction } = await import("../server/app-handlers.js");
   const guest = await handleAppAction("guest-login", {});
   assert.equal(Boolean(guest.token && guest.record?.id), true);
+  track("users", guest.record?.id);
   assert.equal(guest.record.role, "customer");
   const stores = await request("/api/collections/stores/records?perPage=1", {
     headers: { Authorization: guest.token },
@@ -201,7 +240,7 @@ integration("trusted guest-login issues an oder_users token", async () => {
 
 integration("store A cannot read or change store B data", async () => {
   const token = await superuser();
-  const suffix = `${Date.now()}`;
+  const suffix = testPrefix("iso");
   const storeA = await request("/api/collections/stores/records", {
     method: "POST",
     headers: { Authorization: token },
@@ -226,6 +265,8 @@ integration("store A cannot read or change store B data", async () => {
       status: "open",
     }),
   });
+  track("stores", storeA.data?.id);
+  track("stores", storeB.data?.id);
   assert.equal(storeA.ok && storeB.ok, true, JSON.stringify({ storeA: storeA.data, storeB: storeB.data }));
   const userA = await request("/api/collections/oder_users/records", {
     method: "POST",
@@ -280,6 +321,10 @@ integration("store A cannot read or change store B data", async () => {
       idempotency_key: `iso-${suffix}`,
     }),
   });
+  track("users", userA.data?.id);
+  track("products", productB.data?.id);
+  track("users", customer.data?.id);
+  track("orders", orderB.data?.id);
   const authA = await request("/api/collections/oder_users/auth-with-password", {
     method: "POST",
     body: JSON.stringify({ identity: `store_a_${suffix}@campus-order.test`, password: "testpass1" }),

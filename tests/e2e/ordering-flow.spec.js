@@ -1,7 +1,14 @@
 import { expect, test } from "@playwright/test";
 
-const enabled = Boolean(process.env.E2E_BASE_URL);
-test.skip(!enabled, "Set E2E_BASE_URL and a PocketBase test environment.");
+const baseUrl = process.env.E2E_BASE_URL || "";
+const productionTarget = /oder-seven\.vercel\.app|db\.keson\.pro/i.test(baseUrl);
+const enabled = Boolean(baseUrl) && !productionTarget;
+test.skip(
+  !enabled,
+  productionTarget
+    ? "Refusing destructive E2E against the production site."
+    : "Set E2E_BASE_URL to an isolated test site, not production."
+);
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFElEQVR42mNk+M9QzwAEYBxVSFUAAN0ABf5uG14AAAAASUVORK5CYII=",
   "base64"
@@ -16,6 +23,12 @@ test("admin creates store, store uploads product, customer orders, realtime stat
   const storeLogin = `e2e-${suffix}`;
   const storePassword = "Test1234!";
   const productName = `健康餐盒 ${suffix}`;
+
+  const config = await page.request.get("/api/config");
+  if (config.ok()) {
+    const body = await config.json();
+    test.skip(/db\.keson\.pro/i.test(String(body.POCKETBASE_URL || "")), "Refusing E2E that writes to the school PocketBase.");
+  }
 
   await page.goto("/admin/index.html");
   await page.getByLabel("帳號").fill(process.env.E2E_ADMIN_USERNAME || "admin");
