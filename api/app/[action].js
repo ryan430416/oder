@@ -15,7 +15,9 @@ export default async function handler(request, response) {
     });
     response.status(200).json(result);
   } catch (error) {
-    console.error("app action failed", action, error?.message);
-    response.status(200).json({ ok: false, code: "backend_error" });
+    const message = String(error?.message || "");
+    const code = message === "server_not_configured" || message === "admin_auth_failed" ? message : "backend_error";
+    console.error("app action failed", action, code);
+    response.status(200).json({ ok: false, code });
   }
 }

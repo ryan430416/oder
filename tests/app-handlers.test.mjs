@@ -5,6 +5,13 @@ import { moneyInt, isServicePickupTime, pickupIsWithinOrderWindow } from "../ser
 import { parseOrderQuantity } from "../js/quantity.js";
 import { sanitizePocketBaseUrl } from "../js/config.js";
 import { COLLECTION_RULES } from "../pocketbase/collection-rules.js";
+import { adminAccessCode } from "../server/pocketbase-admin.js";
+
+test("missing admin settings and a failed superuser login are different errors", () => {
+  assert.equal(adminAccessCode({ configured: false, loginOk: false }), "server_not_configured");
+  assert.equal(adminAccessCode({ configured: true, loginOk: false }), "admin_auth_failed");
+  assert.equal(adminAccessCode({ configured: true, loginOk: true }), "");
+});
 
 test("order totals only accept whole numbers and ignore client totals", () => {
   assert.equal(moneyInt(35), 35);
