@@ -27,7 +27,12 @@ qs("#form").addEventListener("submit", async (e) => {
 qs("#form").dataset.ready = "1";
 
 await loadConfig();
-document.querySelector(".hint").hidden = !config.SHOW_TEST_ACCOUNT;
+const testHint = document.querySelector("#testAccountHint");
+if (testHint) {
+  const showTestAccount = config.SHOW_TEST_ACCOUNT === true;
+  testHint.hidden = !showTestAccount;
+  testHint.textContent = showTestAccount ? t("admin_hint") : "";
+}
 if (new URLSearchParams(location.search).get("reason") === "session_expired") {
   qs("#err").textContent = t("session_expired");
 }

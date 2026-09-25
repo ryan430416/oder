@@ -3,12 +3,13 @@ import { api } from "../api.js";
 import { cart } from "../cart.js";
 import { money } from "../format.js";
 import { qs, setCartBadge } from "../nav.js";
-import { initI18n, t, storeLabel, productLabel } from "../i18n.js";
+import { initI18n, t, storeLabel } from "../i18n.js";
 import { mountBell } from "../notify-ui.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { cartCheckoutEnabled, cartTotalDisplay, createInflight } from "../ui-state.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
 import { parseCartQuantity, planQtyButtonAction, QTY_MAX, QTY_MIN } from "../quantity.js";
+import { itemDisplayName, quoteLine } from "../variants.js";
 
 initI18n();
 
@@ -51,36 +52,36 @@ function paintEmpty() {
   setCartBadge(qs("#cartCount"));
 }
 
-function livePriceMap(products) {
-  return new Map((products || []).map((product) => [product.product_id, Number(product.price)]));
-}
-
-function lineUnitPrice(item, prices) {
-  return prices.has(item.product_id) ? prices.get(item.product_id) : Number(item.unit_price);
+function lineUnitPrice(item, products) {
+  const product = (products || []).find((row) => row.product_id === item.product_id);
+  if (!product) return Number(item.unit_price);
+  const quoted = quoteLine({ product, variants: product.variants || [], variantId: item.variant_id || "" });
+  return quoted.ok ? quoted.unit : Number(item.unit_price);
 }
 
 function paintItems(cur, store, products, { error = false, code = "cart_load_failed" } = {}) {
   lastError = error;
   lastErrorCode = code;
-  const prices = livePriceMap(products);
   let total = 0;
   const activeId = document.activeElement?.dataset?.qty || "";
   const activeValue = document.activeElement?.value;
   lines.innerHTML = cur.items
     .map((i) => {
-      const unitPrice = lineUnitPrice(i, prices);
+      const unitPrice = lineUnitPrice(i, products);
+      const label = itemDisplayName(i);
+      const id = i.line_id || i.product_id;
       total += unitPrice * i.quantity;
       const atMax = i.quantity >= QTY_MAX;
       return `
-    <div class="card cart-line" data-line="${escapeAttr(i.product_id)}">
+    <div class="card cart-line" data-line="${escapeAttr(id)}">
       <div>
-        <strong>${escapeHtml(productLabel(i.product_id, i.product_name))}</strong>
+        <strong>${escapeHtml(label)}</strong>
         <div class="muted" data-line-sub>${money(unitPrice)} × ${i.quantity} = ${money(unitPrice * i.quantity)}</div>
       </div>
       <div class="qty">
-        <button type="button" data-id="${escapeAttr(i.product_id)}" data-d="-1" aria-label="${escapeAttr(t("qty_decrease"))}">−</button>
-        <input aria-label="${escapeAttr(productLabel(i.product_id, i.product_name))}" type="number" min="${QTY_MIN}" max="${QTY_MAX}" inputmode="numeric" data-qty="${escapeAttr(i.product_id)}" value="${i.quantity}" />
-        <button type="button" data-id="${escapeAttr(i.product_id)}" data-d="1" ${atMax ? "disabled" : ""} aria-label="${escapeAttr(t("qty_increase"))}" aria-disabled="${atMax ? "true" : "false"}">+</button>
+        <button type="button" data-id="${escapeAttr(id)}" data-d="-1" aria-label="${escapeAttr(t("qty_decrease"))}">−</button>
+        <input aria-label="${escapeAttr(label)}" type="number" min="${QTY_MIN}" max="${QTY_MAX}" inputmode="numeric" data-qty="${escapeAttr(id)}" value="${i.quantity}" />
+        <button type="button" data-id="${escapeAttr(id)}" data-d="1" ${atMax ? "disabled" : ""} aria-label="${escapeAttr(t("qty_increase"))}" aria-disabled="${atMax ? "true" : "false"}">+</button>
       </div>
     </div>`;
     })
@@ -135,12 +136,11 @@ function syncLinesFromCart() {
     paintEmpty();
     return;
   }
-  const prices = livePriceMap(lastProducts);
-  let total = 0;
-  for (const item of cur.items) {
-    const unitPrice = lineUnitPrice(item, prices);
+    let total = 0;
+    for (const item of cur.items) {
+      const unitPrice = lineUnitPrice(item, lastProducts);
     total += unitPrice * item.quantity;
-    const line = lines.querySelector(`[data-line="${CSS.escape(item.product_id)}"]`);
+    const line = lines.querySelector(`[data-line="${CSS.escape(item.line_id || item.product_id)}"]`);
     if (!line) continue;
     const sub = line.querySelector("[data-line-sub]");
     if (sub) sub.textContent = `${money(unitPrice)} × ${item.quantity} = ${money(unitPrice * item.quantity)}`;
@@ -175,7 +175,7 @@ function commitQtyInput(inp, { allowEmpty = false } = {}) {
   if (allowEmpty && String(raw).trim() === "") return false;
   const parsed = parseCartQuantity(raw === "" ? "1" : raw, { clamp: true });
   if (!parsed.ok) {
-    const current = cart.get().items.find((i) => i.product_id === productId);
+    const current = cart.get().items.find((i) => (i.line_id || i.product_id) === productId);
     inp.value = String(current?.quantity ?? QTY_MIN);
     return false;
   }
@@ -225,7 +225,7 @@ async function render() {
 lines.addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-id]");
   if (!btn || gate.busy || btn.disabled) return;
-  const item = cart.get().items.find((i) => i.product_id === btn.dataset.id);
+  const item = cart.get().items.find((i) => (i.line_id || i.product_id) === btn.dataset.id);
   if (!item) return;
   const delta = Number(btn.dataset.d);
   const needsConfirm = delta === -1 && item.quantity <= QTY_MIN;

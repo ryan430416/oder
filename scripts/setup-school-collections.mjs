@@ -254,12 +254,35 @@ await ensure("order_items", {
     { name: "order", type: "relation", required: true, collectionId: orders.id, cascadeDelete: true, maxSelect: 1 },
     { name: "product", type: "relation", collectionId: products.id, cascadeDelete: false, maxSelect: 1 },
     { name: "product_name_snapshot", type: "text", required: true, max: 100 },
+    { name: "variant_name_snapshot", type: "text", max: 40 },
     { name: "unit_price", type: "number", required: true, min: 0, onlyInt: true },
     { name: "quantity", type: "number", required: true, min: 1, max: 99, onlyInt: true },
     { name: "subtotal", type: "number", required: true, min: 0, onlyInt: true },
     ...autodate(),
   ],
   indexes: ['CREATE INDEX idx_order_items_order ON order_items ("order")'],
+});
+
+const orderItems = byName().order_items;
+if (orderItems && !orderItems.fields?.some((field) => field.name === "variant_name_snapshot")) {
+  await updateCollection(url, token, orderItems.id, {
+    fields: [...(orderItems.fields || []), { name: "variant_name_snapshot", type: "text", max: 40 }],
+  });
+  collections = await listCollections(url, token);
+}
+
+await ensure("product_variants", {
+  name: "product_variants",
+  type: "base",
+  ...COLLECTION_RULES.product_variants,
+  fields: [
+    { name: "product", type: "relation", required: true, collectionId: products.id, cascadeDelete: true, maxSelect: 1 },
+    { name: "name", type: "text", required: true, min: 1, max: 40 },
+    { name: "price", type: "number", required: true, min: 0, onlyInt: true },
+    { name: "sort", type: "number", min: 0, onlyInt: true },
+    { name: "status", type: "select", required: true, maxSelect: 1, values: ["active", "disabled"] },
+  ],
+  indexes: ["CREATE INDEX idx_product_variants_product_sort ON product_variants (product, sort)"],
 });
 
 await ensure("notifications", {

@@ -18,10 +18,9 @@ function ensureOderUsers(app) {
     name: "oder_users",
     listRule: '@request.auth.id != "" && @request.auth.status = "active" && (id = @request.auth.id || @request.auth.role = "admin")',
     viewRule: '@request.auth.id != "" && @request.auth.status = "active" && (id = @request.auth.id || @request.auth.role = "admin")',
-    createRule:
-      '@request.auth.id = "" && role = "customer" && status = "active" && (@request.body.store:isset = false || store = "")',
+    createRule: '@request.auth.id = "" && role = "customer" && status = "active"',
     updateRule:
-      '@request.auth.id != "" && @request.auth.status = "active" && (@request.auth.role = "admin" || (@request.auth.role = "customer" && id = @request.auth.id && @request.body.role:isset = false && @request.body.status:isset = false && @request.body.store:isset = false))',
+      '@request.auth.id != "" && @request.auth.status = "active" && (@request.auth.role = "admin" || (@request.auth.role = "customer" && id = @request.auth.id && @request.body.role:isset = false && @request.body.status:isset = false))',
     deleteRule: null,
     manageRule: '@request.auth.id != "" && @request.auth.status = "active" && @request.auth.role = "admin"',
     passwordAuth: {
@@ -149,6 +148,21 @@ migrate((app) => {
   });
   app.save(products);
 
+  if (!users.fields.getByName("store")) {
+    throw new Error("oder_users.store must exist before rules reference it");
+  }
+  users.createRule =
+    '@request.auth.id = "" && role = "customer" && status = "active" && (@request.body.store:isset = false || store = "")';
+  users.updateRule =
+    '@request.auth.id != "" && @request.auth.status = "active" && (@request.auth.role = "admin" || (@request.auth.role = "customer" && id = @request.auth.id && @request.body.role:isset = false && @request.body.status:isset = false && @request.body.store:isset = false))';
+  app.save(users);
+
+  const oderUsers = app.findCollectionByNameOrId("oder_users");
+  const systemUsers = app.findCollectionByNameOrId("users");
+  if (!oderUsers.id || oderUsers.id === systemUsers.id) {
+    throw new Error("orders and reviews must reference oder_users, not the built-in users collection");
+  }
+
   const orders = new Collection({
     type: "base",
     name: "orders",
@@ -165,7 +179,7 @@ migrate((app) => {
         name: "customer",
         type: "relation",
         required: true,
-        collectionId: users.id,
+        collectionId: oderUsers.id,
         cascadeDelete: false,
         maxSelect: 1,
       },
@@ -262,7 +276,7 @@ migrate((app) => {
       {
         name: "user",
         type: "relation",
-        collectionId: users.id,
+        collectionId: oderUsers.id,
         cascadeDelete: true,
         maxSelect: 1,
       },
@@ -308,7 +322,7 @@ migrate((app) => {
         name: "customer",
         type: "relation",
         required: true,
-        collectionId: users.id,
+        collectionId: oderUsers.id,
         cascadeDelete: true,
         maxSelect: 1,
       },

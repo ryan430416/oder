@@ -2,17 +2,53 @@ import { auth } from "../auth.js";
 import { api } from "../api.js";
 import { money, formatTime, dateKey, formatDate } from "../format.js";
 import { qs } from "../nav.js";
-import { t, statusLabel, productLabel, gradeLabel } from "../i18n.js";
+import { t, statusLabel, gradeLabel } from "../i18n.js";
 import { runStorePage } from "../store-boot.js";
 import { mountBell } from "../notify-ui.js";
 import { ORDER_FILTERS, filterTabButton, watchOrders } from "../order-filters.js";
 import { escapeAttr, escapeHtml } from "../html.js";
 import { canTransition } from "../order-status.js";
+import { itemDisplayName } from "../variants.js";
 
 await runStorePage(async (session) => {
   qs("#title").textContent = session.name;
   qs("#bound").textContent = t("bound", { id: auth.getBoundStoreId() });
   mountBell(qs("#bellHost"), "notifications.html");
+
+  const orderingState = qs("#orderingState");
+  const orderingToggle = qs("#orderingToggle");
+  const orderingMsg = qs("#orderingMsg");
+
+  async function paintOrdering() {
+    const result = await api.getStore(auth.getBoundStoreId());
+    const status = result.ok ? result.data?.status || "" : "";
+    if (!result.ok) {
+      orderingState.textContent = t("backend_error");
+      orderingToggle.hidden = true;
+      return;
+    }
+    if (status === "disabled") {
+      orderingState.textContent = t("store_disabled_by_admin");
+      orderingToggle.hidden = true;
+      return;
+    }
+    const accepting = status === "open";
+    orderingState.textContent = accepting ? t("ordering_accepting") : t("ordering_paused");
+    orderingToggle.hidden = false;
+    orderingToggle.textContent = accepting ? t("ordering_pause") : t("ordering_resume");
+    orderingToggle.dataset.next = accepting ? "closed" : "open";
+  }
+
+  orderingToggle.addEventListener("click", async () => {
+    orderingToggle.disabled = true;
+    orderingMsg.textContent = "";
+    const next = orderingToggle.dataset.next === "open" ? "open" : "closed";
+    const res = await api.setStoreOrdering(next);
+    orderingToggle.disabled = false;
+    orderingMsg.textContent = res.ok ? t("saved_ok") : t(res.code || "backend_error");
+    await paintOrdering();
+  });
+  paintOrdering();
 
   let group = "all";
 
@@ -81,7 +117,7 @@ await runStorePage(async (session) => {
       <div class="muted">${escapeHtml(t("cust_label", { name: o.customer_name || "—" }))}</div>
       <div class="muted">${escapeHtml(t("grade_label", { grade: gradeLabel(o.customer_grade) }))}</div>
       <div class="muted">${escapeHtml(t("pickup_at", { time: formatTime(o.pickup_time), amount: money(o.total) }))}</div>
-      <ul class="item-list">${o.items.map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}</li>`).join("")}</ul>
+      <ul class="item-list">${o.items.map((i) => `<li>${escapeHtml(itemDisplayName(i))} × ${i.quantity}</li>`).join("")}</ul>
       <div class="row-actions">${actions(o.status)}</div>
     </article>`;
     });

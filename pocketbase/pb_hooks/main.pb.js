@@ -149,6 +149,7 @@ function addNotification(app, fields) {
 }
 
 onRecordCreate((e) => {
+
   if (!e.record.get("role")) e.record.set("role", "customer");
   if (!e.record.get("status")) e.record.set("status", "active");
   if (!e.record.get("display_name") && e.record.get("name")) {
@@ -158,6 +159,7 @@ onRecordCreate((e) => {
 }, AUTH);
 
 onRecordCreateRequest((e) => {
+
   if (e.hasSuperuserAuth()) return e.next();
   if (e.auth && e.auth.get("role") === "store") {
     e.record.set("store", e.auth.get("store"));
@@ -166,6 +168,7 @@ onRecordCreateRequest((e) => {
 }, "products");
 
 onRecordUpdateRequest((e) => {
+
   if (e.hasSuperuserAuth()) return e.next();
   if (e.auth && e.auth.get("role") === "store") {
     e.record.set("store", e.auth.get("store"));
@@ -174,6 +177,7 @@ onRecordUpdateRequest((e) => {
 }, "products");
 
 onRecordEnrich((e) => {
+
   const info = typeof e.requestInfo === "function" ? e.requestInfo() : e.requestInfo;
   const auth = info && info.auth;
   if (auth && auth.get("role") === "admin") e.record.unhide("email");
@@ -181,6 +185,8 @@ onRecordEnrich((e) => {
 }, AUTH);
 
 routerAdd("POST", "/api/app/guest-login", (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
   const users = e.app.findCollectionByNameOrId(AUTH);
   const id = $security.randomStringWithAlphabet(16, "0123456789abcdef");
   const email = "guest_" + id + "@campus-order.test";
@@ -201,6 +207,8 @@ routerAdd(
   "POST",
   "/api/app/update-profile",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     const denied = requireActive(e);
     if (denied) return fail(e, denied);
     if (e.auth.get("role") !== "customer") return fail(e, "bad_login");
@@ -222,6 +230,8 @@ routerAdd(
   "POST",
   "/api/app/create-order",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     const denied = requireActive(e);
     if (denied) return fail(e, denied);
     if (e.auth.get("role") !== "customer") return fail(e, "bad_login");
@@ -281,11 +291,38 @@ routerAdd(
         return fail(e, "invalid_items");
       }
       if (qty == null) return fail(e, "invalid_items");
-      const unit = Number(product.get("price"));
+      let variants = [];
+      try {
+        variants = e.app.findRecordsByFilter("product_variants", "product = {:id}", "sort", 100, 0, { id: product.id });
+      } catch (err) {
+        variants = [];
+      }
+      const active = [];
+      for (let v = 0; v < variants.length; v++) {
+        if (String(variants[v].get("status") || "active") !== "disabled" && String(variants[v].get("name") || "").trim()) {
+          active.push(variants[v]);
+        }
+      }
+      const requested = String(items[i].variant_id || "");
+      let unit = Number(product.get("price"));
+      let variantName = "";
+      if (active.length) {
+        let chosen = null;
+        for (let v = 0; v < active.length; v++) {
+          if (active[v].id === requested) chosen = active[v];
+        }
+        if (!chosen) return fail(e, "need_variant");
+        unit = Number(chosen.get("price"));
+        variantName = String(chosen.get("name") || "");
+      } else if (requested) {
+        return fail(e, "invalid_items");
+      }
+      if (!isFinite(unit) || unit < 0 || unit !== Math.floor(unit)) return fail(e, "invalid_items");
       const subtotal = unit * qty;
       total += subtotal;
       prepared.push({
         product: product,
+        variantName: variantName,
         quantity: qty,
         unit_price: unit,
         subtotal: subtotal,
@@ -320,6 +357,9 @@ routerAdd(
           row.set("order", order.id);
           row.set("product", prepared[i].product.id);
           row.set("product_name_snapshot", prepared[i].product.get("name"));
+          if (itemCollection.fields.getByName("variant_name_snapshot")) {
+            row.set("variant_name_snapshot", prepared[i].variantName || "");
+          }
           row.set("unit_price", prepared[i].unit_price);
           row.set("quantity", prepared[i].quantity);
           row.set("subtotal", prepared[i].subtotal);
@@ -356,6 +396,8 @@ routerAdd(
   "POST",
   "/api/app/update-order-status",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     const denied = requireActive(e);
     if (denied) return fail(e, denied);
     const body = bodyOf(e);
@@ -389,6 +431,8 @@ routerAdd(
   "POST",
   "/api/app/cancel-order",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     const denied = requireActive(e);
     if (denied) return fail(e, denied);
     const order = findById(e.app, "orders", String(bodyOf(e).order_id || ""));
@@ -410,6 +454,8 @@ routerAdd(
   "POST",
   "/api/app/delete-product",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     const denied = requireActive(e);
     if (denied) return fail(e, denied);
     const product = findById(e.app, "products", String(bodyOf(e).product_id || ""));
@@ -439,6 +485,8 @@ routerAdd(
   "POST",
   "/api/app/delete-store",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     if (!isAdmin(e.auth)) return fail(e, "not_admin");
     const storeId = String(bodyOf(e).store_id || "");
     const store = findById(e.app, "stores", storeId);
@@ -508,6 +556,8 @@ routerAdd(
   "POST",
   "/api/app/disable-store",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     if (!isAdmin(e.auth)) return fail(e, "not_admin");
     const storeId = String(bodyOf(e).store_id || "");
     const store = findById(e.app, "stores", storeId);
@@ -536,6 +586,8 @@ routerAdd(
   "POST",
   "/api/app/enable-store",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     if (!isAdmin(e.auth)) return fail(e, "not_admin");
     const storeId = String(bodyOf(e).store_id || "");
     const store = findById(e.app, "stores", storeId);
@@ -564,6 +616,8 @@ routerAdd(
   "POST",
   "/api/app/mark-notification-read",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     const denied = requireActive(e);
     if (denied) return fail(e, denied);
     const row = findById(e.app, "notifications", String(bodyOf(e).notification_id || ""));
@@ -582,6 +636,8 @@ routerAdd(
   "POST",
   "/api/app/create-store-account",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     if (!isAdmin(e.auth)) return fail(e, "not_admin");
     const body = bodyOf(e);
     const storeId = String(body.store_id || "");
@@ -618,6 +674,8 @@ routerAdd(
   "POST",
   "/api/app/reset-store-password",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     if (!isAdmin(e.auth)) return fail(e, "not_admin");
     const body = bodyOf(e);
     const password = String(body.password || "");
@@ -637,8 +695,62 @@ routerAdd(
 
 routerAdd(
   "POST",
+  "/api/app/set-store-ordering",
+  (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
+    const denied = requireActive(e);
+    if (denied) return fail(e, denied);
+    const own = storeIdOf(e.auth);
+    const requested = String(bodyOf(e).store_id || "");
+    if (!own || (requested && requested !== own)) return fail(e, "not_store");
+    const store = findById(e.app, "stores", own);
+    if (!store) return fail(e, "no_store");
+    const current = String(store.get("status") || "");
+    const next = String(bodyOf(e).status || "");
+    if (current === "disabled") return fail(e, "store_disabled_by_admin");
+    if (next !== "open" && next !== "closed") return fail(e, "invalid_status");
+    store.set("status", next);
+    e.app.save(store);
+    return ok(e, { status: next, store_id: own });
+  },
+  $apis.requireAuth(AUTH)
+);
+
+routerAdd(
+  "POST",
+  "/api/app/change-own-password",
+  (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
+    const denied = requireActive(e);
+    if (denied) return fail(e, denied);
+    if (!storeIdOf(e.auth)) return fail(e, "not_store");
+    const body = bodyOf(e);
+    const requested = String(body.user_id || "");
+    if (requested && requested !== e.auth.id) return fail(e, "not_store");
+    const current = String(body.current_password || "");
+    const next = String(body.new_password || "");
+    const confirm = String(body.confirm_password || "");
+    if (!current || !next || !confirm) return fail(e, "password_required");
+    if (next !== confirm) return fail(e, "password_mismatch");
+    if (next.length < 4) return fail(e, "password_too_short_new");
+    if (next === current) return fail(e, "password_unchanged");
+    if (!e.auth.validatePassword(current)) return fail(e, "bad_password");
+    e.auth.set("password", next);
+    e.auth.set("passwordConfirm", next);
+    e.app.save(e.auth);
+    return ok(e, { reauth: true });
+  },
+  $apis.requireAuth(AUTH)
+);
+
+routerAdd(
+  "POST",
   "/api/app/disable-user",
   (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
     if (!isAdmin(e.auth)) return fail(e, "not_admin");
     const userId = String(bodyOf(e).user_id || "");
     if (!userId || userId === e.auth.id) return fail(e, "cannot_delete_admin");
@@ -652,6 +764,8 @@ routerAdd(
 );
 
 routerAdd("POST", "/api/app/request-password-reset", (e) => {
+    const { AUTH, fail, ok, writeAudit, bodyOf, bangkokParts, parseDate, isServicePickupTime, pickupIsWithinOrderWindow, loginEmail, isAdmin, storeIdOf, requireActive, findById, exportRecord, nextOrderNumber, addNotification } = require(__hooks + "/lib.js");
+
   const username = String(bodyOf(e).username || "").trim().toLowerCase().slice(0, 100);
   if (!username) return ok(e);
   try {

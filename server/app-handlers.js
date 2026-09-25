@@ -21,6 +21,14 @@ import {
   pbFetch,
   updateRecord,
 } from "./pocketbase-admin.js";
+import {
+  nextStoreOrderingStatus,
+  orderAllowedForStoreStatus,
+  passwordChangeTarget,
+  storeOrderingTarget,
+  validatePasswordChange,
+} from "../js/store-self-service.js";
+import { quoteLine } from "../js/variants.js";
 
 const AUTH = "oder_users";
 const GRADES = new Set(["high_1", "high_2", "high_3"]);
@@ -144,6 +152,10 @@ export async function handleAppAction(action, { body = {}, authorization = "" } 
       return createStoreAccount(authorization, body);
     case "reset-store-password":
       return resetStorePassword(authorization, body);
+    case "set-store-ordering":
+      return setStoreOrdering(authorization, body);
+    case "change-own-password":
+      return changeOwnPassword(authorization, body);
     case "disable-user":
       return disableUser(authorization, body);
     case "request-password-reset":
@@ -212,7 +224,7 @@ async function createOrder(authorization, body) {
   if (duplicate) return ok({ duplicate: true, order: duplicate });
 
   const store = await findById("stores", storeId);
-  if (!store || store.status !== "open") return fail("store_closed");
+  if (!store || !orderAllowedForStoreStatus(store.status)) return fail("store_closed");
   const parts = bangkokParts(pickup);
   if (
     !pickupIsWithinOrderWindow(pickup, new Date()) ||
@@ -230,12 +242,25 @@ async function createOrder(authorization, body) {
     const product = await findById("products", String(item.product_id || ""));
     if (!product || product.store !== storeId || product.status !== "active") return fail("invalid_items");
     if (qty == null) return fail("invalid_items");
-    const unit = moneyInt(product.price);
+    let variants = [];
+    try {
+      variants = await findAll("product_variants", `product="${product.id}"`);
+    } catch {
+      variants = [];
+    }
+    const quoted = quoteLine({
+      product,
+      variants: variants.map((row) => ({ ...row, id: row.id })),
+      variantId: item.variant_id || "",
+    });
+    if (!quoted.ok) return fail(quoted.code);
+    const unit = moneyInt(quoted.unit);
     if (unit == null) return fail("invalid_items");
     const subtotal = unit * qty;
     total += subtotal;
     prepared.push({
       product,
+      variantName: quoted.variantName,
       quantity: qty,
       unit_price: unit,
       subtotal,
@@ -266,6 +291,7 @@ async function createOrder(authorization, body) {
         order: order.id,
         product: row.product.id,
         product_name_snapshot: row.product.name,
+        variant_name_snapshot: row.variantName || "",
         unit_price: row.unit_price,
         quantity: row.quantity,
         subtotal: row.subtotal,
@@ -647,6 +673,45 @@ async function resetStorePassword(authorization, body) {
   if (!rows.length) return fail("no_user");
   await updateRecord(AUTH, rows[0].id, { password, passwordConfirm: password });
   return ok();
+}
+
+async function setStoreOrdering(authorization, body) {
+  const { auth, error } = await requireUser(authorization);
+  if (error) return error;
+  const target = storeOrderingTarget(storeIdOf(auth.record), body.store_id);
+  if (!target.ok) return fail(target.code);
+  const store = await findById("stores", target.storeId);
+  if (!store) return fail("no_store");
+  const next = nextStoreOrderingStatus(store.status, String(body.status || ""));
+  if (!next.ok) return fail(next.code);
+  await updateRecord("stores", target.storeId, { status: next.status });
+  return ok({ status: next.status, store_id: target.storeId });
+}
+
+async function changeOwnPassword(authorization, body) {
+  const { auth, error } = await requireUser(authorization);
+  if (error) return error;
+  if (auth.record.role !== "store" || auth.record.status !== "active") return fail("not_store");
+  const target = passwordChangeTarget(auth.record.id, body.user_id);
+  if (!target.ok) return fail(target.code);
+  const problem = validatePasswordChange({
+    currentPassword: body.current_password,
+    newPassword: body.new_password,
+    confirmPassword: body.confirm_password,
+  });
+  if (problem) return fail(problem);
+  const email = String(auth.record.email || "");
+  if (!email) return fail("backend_error");
+  const check = await pbFetch(`/api/collections/${AUTH}/auth-with-password`, {
+    method: "POST",
+    body: { identity: email, password: String(body.current_password || "") },
+  });
+  if (!check.ok) return fail("bad_password");
+  await updateRecord(AUTH, target.userId, {
+    password: String(body.new_password || ""),
+    passwordConfirm: String(body.new_password || ""),
+  });
+  return ok({ reauth: true });
 }
 
 async function disableUser(authorization, body) {

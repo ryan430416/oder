@@ -4,6 +4,7 @@
 import { config } from "./config.js";
 import { storage } from "./storage.js";
 import { parseCartQuantity, QTY_MAX, QTY_MIN } from "./quantity.js";
+import { lineId, quoteLine } from "./variants.js";
 
 function emptyCart() {
   return { store_id: "", items: [] };
@@ -27,22 +28,32 @@ export const cart = {
     if ((product.status && product.status !== "active") || amount == null) {
       return { ok: false, code: "INVALID_QUANTITY" };
     }
+    const quoted = quoteLine({
+      product,
+      variants: product.variants || [],
+      variantId: product.variant_id || "",
+    });
+    if (!quoted.ok) return quoted;
+    const id = lineId(product.product_id, quoted.variantId);
     const c = this.get();
     if (c.store_id && c.store_id !== product.store_id) {
       return { ok: false, code: "OTHER_STORE" };
     }
     c.store_id = product.store_id;
-    const found = c.items.find((i) => i.product_id === product.product_id);
+    const found = c.items.find((i) => i.line_id === id);
     if (found && found.quantity + amount > QTY_MAX) {
       return { ok: false, code: "INVALID_QUANTITY" };
     }
     if (found) found.quantity += amount;
     else {
       c.items.push({
+        line_id: id,
         product_id: product.product_id,
+        variant_id: quoted.variantId,
+        variant_name: quoted.variantName,
         store_id: product.store_id,
         product_name: product.product_name,
-        unit_price: product.price,
+        unit_price: quoted.unit,
         quantity: amount,
       });
     }
@@ -54,9 +65,9 @@ export const cart = {
    * Set line quantity. Empty input does not delete the line.
    * Values are clamped to 1–99 when parseable; invalid input is rejected.
    */
-  setQty(productId, quantity) {
+  setQty(line, quantity) {
     const c = this.get();
-    const item = c.items.find((i) => i.product_id === productId);
+    const item = c.items.find((i) => i.line_id === line || (!i.line_id && i.product_id === line));
     if (!item) return { ok: false, cart: c };
     const parsed = parseCartQuantity(quantity, { clamp: true });
     if (parsed.empty) return { ok: false, empty: true, cart: c, quantity: item.quantity };
@@ -66,9 +77,9 @@ export const cart = {
     return { ok: true, cart: c, quantity: parsed.value, clamped: parsed.clamped };
   },
 
-  remove(productId) {
+  remove(line) {
     const c = this.get();
-    c.items = c.items.filter((i) => i.product_id !== productId);
+    c.items = c.items.filter((i) => i.line_id !== line && !(!i.line_id && i.product_id === line));
     if (!c.items.length) c.store_id = "";
     this.save(c);
     return c;

@@ -3,11 +3,12 @@ import { api } from "../api.js";
 import { cart } from "../cart.js";
 import { money, pickupSlotsForStore } from "../format.js";
 import { qs } from "../nav.js";
-import { initI18n, t, storeLabel, productLabel } from "../i18n.js";
+import { initI18n, t, storeLabel } from "../i18n.js";
 import { escapeHtml } from "../html.js";
 import { createInflight } from "../ui-state.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
 import { parseOrderQuantity } from "../quantity.js";
+import { itemDisplayName, quoteLine } from "../variants.js";
 
 initI18n();
 
@@ -21,6 +22,7 @@ const confirmButton = qs("#confirm");
 const msg = qs("#msg");
 const statusEl = qs("#checkoutStatus");
 const gate = createInflight();
+const submitGate = createInflight();
 const idempotencyKey = crypto.randomUUID();
 let session = null;
 let pageError = "";
@@ -62,21 +64,22 @@ async function loadCheckout() {
       const products = productResult.data || [];
       let priceChanged = false;
       const liveItems = c.items.map((item) => {
-        const product = products.find(
-          (candidate) => candidate.product_id === item.product_id && candidate.status === "active"
-        );
+        const product = products.find((candidate) => candidate.product_id === item.product_id);
         const quantity = parseOrderQuantity(item.quantity);
-        const price = Number(product?.price);
-        if (
-          !product ||
-          quantity == null ||
-          !Number.isFinite(price) ||
-          price < 0
-        ) {
-          return null;
-        }
-        if (Number(item.unit_price) !== price) priceChanged = true;
-        return { ...item, quantity, product_name: product.product_name, unit_price: price };
+        const quoted = quoteLine({
+          product,
+          variants: product?.variants || [],
+          variantId: item.variant_id || "",
+        });
+        if (!product || quantity == null || !quoted.ok) return null;
+        if (Number(item.unit_price) !== quoted.unit) priceChanged = true;
+        return {
+          ...item,
+          quantity,
+          product_name: product.product_name,
+          variant_name: quoted.variantName,
+          unit_price: quoted.unit,
+        };
       });
       if (liveItems.some((item) => !item)) pageError ||= "invalid_items";
       const slots = fillPickup(store);
@@ -101,7 +104,7 @@ async function loadCheckout() {
         <strong>${escapeHtml(t("order_content"))}</strong>
         <p class="muted">${escapeHtml(storeName)}</p>
         <ul class="item-list">
-          ${validItems.map((i) => `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}　${money(i.unit_price * i.quantity)}</li>`).join("")}
+          ${validItems.map((i) => `<li>${escapeHtml(itemDisplayName(i))} × ${i.quantity}　${money(i.unit_price * i.quantity)}</li>`).join("")}
         </ul>
         <p><strong>${escapeHtml(t("sum", { amount: money(total) }))}</strong></p>
       `;
@@ -120,33 +123,41 @@ async function loadCheckout() {
 }
 
 confirmButton.addEventListener("click", async () => {
-  if (pageError || !pickup.value || confirmButton.disabled) return;
-  const named = await auth.setCustomerProfile(qs("#custName").value, qs("#custGrade").value);
-  if (!named.ok) {
-    msg.textContent = t(named.code);
-    return;
-  }
-  session = named.session;
-  confirmButton.disabled = true;
-  const res = await api.createOrder({
-    customer_id: session.user_id,
-    customer_name: session.name,
-    customer_grade: session.grade,
-    store_id: c.store_id,
-    pickup_time: pickup.value,
-    payment_method: qs("#pay").value,
-    idempotency_key: idempotencyKey,
-    items: validItems.map((item) => ({ product_id: item.product_id, quantity: item.quantity })),
-  });
-  if (res.ok) {
-    cart.clear();
-    const orderNumber = res.order.order_number || res.order.id;
-    msg.textContent = t("order_created", { id: orderNumber });
-    location.href = `orders.html?created=${encodeURIComponent(orderNumber)}`;
-  } else {
+  const run = await submitGate.run(async () => {
+    if (pageError || !pickup.value || confirmButton.disabled) return;
+    confirmButton.disabled = true;
+    const named = await auth.setCustomerProfile(qs("#custName").value, qs("#custGrade").value);
+    if (!named.ok) {
+      msg.textContent = t(named.code);
+      confirmButton.disabled = false;
+      return;
+    }
+    session = named.session;
+    const res = await api.createOrder({
+      customer_id: session.user_id,
+      customer_name: session.name,
+      customer_grade: session.grade,
+      store_id: c.store_id,
+      pickup_time: pickup.value,
+      payment_method: qs("#pay").value,
+      idempotency_key: idempotencyKey,
+      items: validItems.map((item) => ({
+        product_id: item.product_id,
+        variant_id: item.variant_id || "",
+        quantity: item.quantity,
+      })),
+    });
+    if (res.ok) {
+      cart.clear();
+      const orderNumber = res.order.order_number || res.order.id;
+      msg.textContent = t("order_created", { id: orderNumber });
+      location.href = `orders.html?created=${encodeURIComponent(orderNumber)}`;
+      return;
+    }
     msg.textContent = t(res.code || "order_fail");
     confirmButton.disabled = false;
-  }
+  });
+  if (run?.skipped) return;
 });
 
 if (c.items.length) loadCheckout();

@@ -171,6 +171,7 @@ form.addEventListener("submit", async (event) => {
         file: photoInput.files[0] || null,
         currentImagePath,
         previousImagePath: originalImagePath,
+        imageRemoved: !photoInput.files[0] && Boolean(originalImagePath) && !currentImagePath,
         onProgress: (value) => (progress.value = value),
       });
     } finally {

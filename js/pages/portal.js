@@ -21,8 +21,12 @@ async function checkBackend() {
     pending.textContent = t("stores_loading");
     status.append(pending);
     await loadConfig();
-    const hint = document.querySelector(".hint");
-    if (hint) hint.hidden = !config.SHOW_TEST_ACCOUNT;
+    const hint = document.querySelector("#testAccountHint");
+    if (hint) {
+      const showTestAccount = config.SHOW_TEST_ACCOUNT === true;
+      hint.hidden = !showTestAccount;
+      hint.textContent = showTestAccount ? t("portal_hint") : "";
+    }
     const result = await pingBackend();
     if (result.ok) {
       hideBackendNotice(status);
