@@ -11,8 +11,18 @@ if (!existsSync(binary)) {
   process.exit(1);
 }
 
-const child = spawn(binary, ["serve", "--http=127.0.0.1:8090"], {
-  cwd: ROOT,
-  stdio: "inherit",
-});
+const child = spawn(
+  binary,
+  [
+    "serve",
+    "--http=127.0.0.1:8090",
+    `--dir=${join(ROOT, "pb_data")}`,
+    `--migrationsDir=${join(ROOT, "pb_migrations")}`,
+    `--hooksDir=${join(ROOT, "pb_hooks")}`,
+  ],
+  {
+    cwd: ROOT,
+    stdio: "inherit",
+  }
+);
 child.on("exit", (code) => process.exit(code ?? 0));

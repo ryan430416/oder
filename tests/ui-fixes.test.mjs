@@ -238,3 +238,26 @@ test("portal copy is translated in zh, en, th, and my", () => {
     assert.equal(t("notices_load_failed").length > 0, true);
   }
 });
+
+test("public pages do not render test passwords before config loads", async () => {
+  for (const file of ["index.html", "admin/index.html", "store/index.html"]) {
+    const html = await readFile(new URL(`../${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(html, /1234/);
+    assert.match(html, /id="testAccountHint" hidden/);
+  }
+  const portal = await readFile(new URL("../js/pages/portal.js", import.meta.url), "utf8");
+  const admin = await readFile(new URL("../js/pages/admin-login.js", import.meta.url), "utf8");
+  assert.match(portal, /showTestAccount \? t\("portal_hint"\) : ""/);
+  assert.match(admin, /showTestAccount \? t\("admin_hint"\) : ""/);
+});
+
+test("checkout disables confirm before profile save so a second click cannot submit", async () => {
+  const source = await readFile(new URL("../js/pages/customer-checkout.js", import.meta.url), "utf8");
+  const start = source.indexOf("confirmButton.addEventListener");
+  const handler = source.slice(start);
+  assert.match(handler, /submitGate\.run/);
+  const disableAt = handler.indexOf("confirmButton.disabled = true");
+  const profileAt = handler.indexOf("setCustomerProfile");
+  const orderAt = handler.indexOf("api.createOrder");
+  assert.ok(disableAt > 0 && disableAt < profileAt && profileAt < orderAt);
+});

@@ -171,6 +171,7 @@ form.addEventListener("submit", async (event) => {
         file: photoInput.files[0] || null,
         currentImagePath,
         previousImagePath: originalImagePath,
+        imageRemoved: !photoInput.files[0] && Boolean(originalImagePath) && !currentImagePath,
         onProgress: (value) => (progress.value = value),
       });
     } finally {
@@ -207,13 +208,18 @@ list.addEventListener("click", async (event) => {
   if (!product) return;
   if (deleteButton) {
     if (!confirm(t("confirm_delete_product", { name: product.product_name }))) return;
+    deleteButton.disabled = true;
     const result = await api.deleteProduct(product.product_id);
-    if (result.ok && result.deleted && result.image_path) await deleteProductImage(result.image_path);
-    msg.textContent = result.ok
-      ? t(result.hidden ? "product_hidden_history" : "deleted_ok")
-      : t(result.code || "backend_error");
-    showToast(msg.textContent, result.ok ? "success" : "error");
-    if (result.ok && form.product_id.value === product.product_id) resetForm();
+    if (!result.ok) {
+      deleteButton.disabled = false;
+      msg.textContent = t(result.code || "backend_error");
+      showToast(msg.textContent, "error");
+      return;
+    }
+    if (result.deleted && result.image_path) await deleteProductImage(result.image_path);
+    msg.textContent = t(result.hidden ? "product_hidden_history" : "deleted_ok");
+    showToast(msg.textContent, "success");
+    if (form.product_id.value === product.product_id) resetForm();
     await render();
     return;
   }

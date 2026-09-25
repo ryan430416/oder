@@ -48,8 +48,8 @@ test("validateImageSignature accepts a real 256x256 PNG by numeric magic bytes",
   assert.equal(signature.ok, true);
   assert.equal(signature.mime, "image/png");
   const result = await validateProductImage(file);
-  assert.equal(result.ok, true);
-  assert.equal(result.mime, "image/png");
+  assert.equal(result.code, "image_too_small");
+  assert.equal(result.ok, false);
 });
 
 test("validateImageSignature accepts JPEG by FF D8 FF and WebP by RIFF/WEBP", async () => {
@@ -59,7 +59,7 @@ test("validateImageSignature accepts JPEG by FF D8 FF and WebP by RIFF/WEBP", as
   assert.equal(jpegBytes[1], 0xd8);
   assert.equal(jpegBytes[2], 0xff);
   assert.equal((await validateImageSignature(jpeg)).mime, "image/jpeg");
-  assert.equal((await validateProductImage(jpeg)).ok, true);
+  assert.equal((await validateProductImage(jpeg)).code, "image_too_small");
 
   const noJfif = await fixtureFile("nojfif.jpg", "image/jpeg");
   const noJfifBytes = new Uint8Array(await noJfif.slice(0, 16).arrayBuffer());
@@ -72,7 +72,7 @@ test("validateImageSignature accepts JPEG by FF D8 FF and WebP by RIFF/WEBP", as
   assert.deepEqual([webpBytes[0], webpBytes[1], webpBytes[2], webpBytes[3]], [0x52, 0x49, 0x46, 0x46]);
   assert.deepEqual([webpBytes[8], webpBytes[9], webpBytes[10], webpBytes[11]], [0x57, 0x45, 0x42, 0x50]);
   assert.equal((await validateImageSignature(webp)).mime, "image/webp");
-  assert.equal((await validateProductImage(webp)).ok, true);
+  assert.equal((await validateProductImage(webp)).code, "image_too_small");
 });
 
 test("signature check rejects string or ArrayBuffer comparisons", async () => {
@@ -98,9 +98,10 @@ test("real JPEG PNG and WebP fixtures pass File.type and Uint8Array magic checks
   for (const file of [jpeg, png, palette, webp]) {
     const bytes = new Uint8Array(await file.arrayBuffer());
     assert.equal(bytes.buffer instanceof ArrayBuffer, true);
-    const result = await validateProductImage(file);
+    const result = await validateImageSignature(file);
     assert.equal(result.ok, true, file.name);
     assert.equal(result.mime, file.type);
+    assert.equal((await validateProductImage(file)).code, "image_too_small");
   }
   const jpegBytes = new Uint8Array(await jpeg.arrayBuffer());
   assert.equal(jpegBytes[0], 0xff);
@@ -133,10 +134,12 @@ test("a failed selection can be replaced by a real PNG without keeping retry", a
   const failed = photoSelectionResult({ ok: false, code: "invalid_image_type" });
   assert.equal(failed.preview, false);
   assert.equal(failed.retry, false);
-  const recovered = photoSelectionResult(await validateProductImage(await fixtureFile("standard.png", "image/png")));
+  const tooSmall = photoSelectionResult(await validateProductImage(await fixtureFile("standard.png", "image/png")));
+  assert.equal(tooSmall.preview, false);
+  assert.equal(tooSmall.retry, false);
+  assert.equal(tooSmall.message, "image_too_small");
+  const recovered = photoSelectionResult({ ok: true, mime: "image/png" });
   assert.equal(recovered.preview, true);
-  assert.equal(recovered.remove, true);
-  assert.equal(recovered.retry, false);
   assert.equal(recovered.message, "image_ready");
 });
 

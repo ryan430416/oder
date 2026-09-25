@@ -10,6 +10,13 @@ export function adminConfigured() {
   );
 }
 
+/** Missing settings and a rejected superuser login are different failures. */
+export function adminAccessCode({ configured = false, loginOk = false } = {}) {
+  if (!configured) return "server_not_configured";
+  if (!loginOk) return "admin_auth_failed";
+  return "";
+}
+
 export async function pbFetch(path, { method = "GET", body, token } = {}) {
   const url = pocketBaseUrl();
   if (!url) throw new Error("POCKETBASE_URL missing");
@@ -53,7 +60,7 @@ export async function adminToken() {
       return result.data.token;
     }
   }
-  throw new Error("server_not_configured");
+  throw new Error(adminAccessCode({ configured: true, loginOk: false }));
 }
 
 export async function adminFetch(path, options = {}) {

@@ -1,9 +1,10 @@
 import { api } from "../api.js";
 import { money, formatTime, dateKey, formatDate } from "../format.js";
 import { qs } from "../nav.js";
-import { t, statusLabel, productLabel, storeLabel, gradeLabel } from "../i18n.js";
+import { t, statusLabel, storeLabel, gradeLabel } from "../i18n.js";
 import { runAdminPage } from "../admin-boot.js";
 import { escapeAttr, escapeHtml } from "../html.js";
+import { itemDisplayName } from "../variants.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
 import { watchOrders } from "../order-filters.js";
 import { campusDateKey } from "../campus-time.js";
@@ -52,7 +53,7 @@ function paintOrders(orders) {
       <ul class="item-list">${(o.items || [])
         .map(
           (i) =>
-            `<li>${escapeHtml(productLabel(i.product_id, i.product_name))} × ${i.quantity}　${money(
+            `<li>${escapeHtml(itemDisplayName(i))} × ${i.quantity}　${money(
               (i.unit_price || 0) * (i.quantity || 0)
             )}</li>`
         )

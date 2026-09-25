@@ -20,7 +20,8 @@ test("orders can be placed any time for today or tomorrow pickup windows", () =>
 test("order APIs recalculate prices and enforce idempotency", () => {
   assert.match(schema, /idx_orders_idempotency/);
   assert.match(hooks, /product\.get\("price"\)/);
-  assert.match(handlers, /moneyInt\(product\.price\)/);
+  assert.match(handlers, /quoteLine\(/);
+  assert.match(handlers, /variant_name_snapshot/);
   assert.match(hooks, /total \+= subtotal/);
   assert.match(handlers, /total \+= subtotal/);
   assert.doesNotMatch(hooks, /body\.total/);

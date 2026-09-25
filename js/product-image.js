@@ -124,7 +124,61 @@ export async function validateProductImage(file) {
   if (!ALLOWED_MIME.has(declared)) return { ok: false, code: "invalid_image_type" };
   const signature = await validateImageSignature(file);
   if (!signature.ok || signature.mime !== declared) return { ok: false, code: "invalid_image_type" };
-  return { ok: true, mime: signature.mime };
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const size = imagePixelSize(bytes, signature.mime);
+  if (!size || !isUsableImageDimension(size.width, size.height)) {
+    return { ok: false, code: "image_too_small" };
+  }
+  return { ok: true, mime: signature.mime, width: size.width, height: size.height };
+}
+
+function u32be(bytes, offset) {
+  return ((bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3]) >>> 0;
+}
+
+function u24le(bytes, offset) {
+  return bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+}
+
+export function imagePixelSize(bytes, mime) {
+  const view = bytes instanceof Uint8Array ? bytes : new Uint8Array();
+  if (mime === "image/png" && view.length >= 24) {
+    return { width: u32be(view, 16), height: u32be(view, 20) };
+  }
+  if (mime === "image/jpeg") return jpegPixelSize(view);
+  if (mime === "image/webp") return webpPixelSize(view);
+  return null;
+}
+
+function jpegPixelSize(bytes) {
+  let offset = 2;
+  while (offset + 8 < bytes.length) {
+    if (bytes[offset] !== 0xff) return null;
+    const marker = bytes[offset + 1];
+    if (marker === 0xd8 || marker === 0xd9) {
+      offset += 2;
+      continue;
+    }
+    const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+    if (length < 2) return null;
+    if (marker >= 0xc0 && marker <= 0xc3) {
+      return { height: (bytes[offset + 5] << 8) | bytes[offset + 6], width: (bytes[offset + 7] << 8) | bytes[offset + 8] };
+    }
+    offset += 2 + length;
+  }
+  return null;
+}
+
+function webpPixelSize(bytes) {
+  if (bytes.length < 30) return null;
+  const chunk = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]);
+  if (chunk === "VP8X") {
+    return { width: 1 + u24le(bytes, 24), height: 1 + u24le(bytes, 27) };
+  }
+  if (chunk === "VP8 ") {
+    return { width: u24le(bytes, 26) & 0x3fff, height: ((bytes[28] | (bytes[29] << 8)) & 0x3fff) };
+  }
+  return null;
 }
 
 function canvasBlob(canvas, quality) {
@@ -321,6 +375,12 @@ export function storageHttpErrorCode(status) {
   return "image_upload_failed";
 }
 
+export function pocketBaseImageErrorCode(remoteCode, status) {
+  if (remoteCode === "validation_file_size") return "invalid_image_size";
+  if (remoteCode === "validation_invalid_mime_type") return "invalid_image_type";
+  return storageHttpErrorCode(status);
+}
+
 function uploadBlob(productId, blob, onProgress) {
   return new Promise(async (resolve) => {
     try {
@@ -364,7 +424,7 @@ function uploadBlob(productId, blob, onProgress) {
           code: ok ? "ok" : remoteCode || storageHttpErrorCode(request.status),
         });
         if (!ok) {
-          resolve({ ok: false, code: storageHttpErrorCode(request.status) });
+          resolve({ ok: false, code: pocketBaseImageErrorCode(remoteCode, request.status), status: request.status });
           return;
         }
         let filename = "";
@@ -389,6 +449,9 @@ export async function uploadProductImage(file, storeId, productId, options = {})
   try {
     if (!isRecordId(storeId)) return { ok: false, code: "store_unbound" };
     if (!isRecordId(productId)) return { ok: false, code: "product_save_failed" };
+    if (options.alreadyCompressed) {
+      return uploadBlob(productId, file, options.onProgress);
+    }
     const compressed = await compressProductImage(file);
     if (!compressed.ok) return compressed;
     if (!isUsableImageDimension(compressed.width, compressed.height)) {

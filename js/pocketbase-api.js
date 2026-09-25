@@ -12,6 +12,7 @@ import {
   topKeyedCount,
 } from "./admin-data.js";
 import { campusDateKey } from "./campus-time.js";
+import { pocketBaseImageErrorCode } from "./product-image.js";
 
 function fileName(value) {
   if (Array.isArray(value)) return value[0] || "";
@@ -65,6 +66,7 @@ function normalizeOrder(row) {
       order_item_id: item.id,
       product_id: item.product || item.product_id || "",
       product_name: item.product_name_snapshot,
+      variant_name: item.variant_name_snapshot || item.variant_name || "",
     })),
   };
 }
@@ -182,7 +184,30 @@ export const pocketbaseApi = {
         filter: client.filter("store = {:id}", { id: storeId }),
         sort: "created",
       });
-      return { ok: true, data: withProductUrls(client, data) };
+      const products = withProductUrls(client, data);
+      let variants = [];
+      try {
+        variants = await client.collection("product_variants").getFullList({
+          filter: client.filter("product.store = {:id}", { id: storeId }),
+          sort: "sort",
+        });
+      } catch {
+        variants = [];
+      }
+      const grouped = new Map();
+      for (const row of variants) {
+        const productId = row.product;
+        if (!grouped.has(productId)) grouped.set(productId, []);
+        grouped.get(productId).push({
+          ...row,
+          variant_id: row.id,
+          status: row.status || "active",
+        });
+      }
+      return {
+        ok: true,
+        data: products.map((product) => ({ ...product, variants: grouped.get(product.product_id) || [] })),
+      };
     } catch (error) {
       console.error("PocketBase query failed", error?.status || "unknown");
       return { ok: false, data: [], code: "backend_error" };
@@ -384,22 +409,36 @@ export const pocketbaseApi = {
     }
   },
 
-  async createProduct(payload) {
+  async createProduct(payload, imageFile = null) {
     const client = await getPocketBase();
     const storeId = payload.store_id || auth.getBoundStoreId();
     if (!storeId) return { ok: false, code: "store_unbound" };
+    const fields = {
+      store: storeId,
+      name: String(payload.product_name || "").trim(),
+      category: String(payload.category || "").trim(),
+      description: String(payload.description || "").trim(),
+      price: Math.round(Number(payload.price)),
+      status: payload.status || "active",
+    };
     try {
-      const data = await client.collection("products").create({
-        store: storeId,
-        name: String(payload.product_name || "").trim(),
-        category: String(payload.category || "").trim(),
-        description: String(payload.description || "").trim(),
-        price: Math.round(Number(payload.price)),
-        status: payload.status || "active",
-      });
+      let data;
+      if (imageFile) {
+        const form = new FormData();
+        Object.entries(fields).forEach(([key, value]) => form.append(key, String(value)));
+        form.append("image", imageFile, "product.webp");
+        data = await client.collection("products").create(form);
+      } else {
+        data = await client.collection("products").create(fields);
+      }
       return { ok: true, product: normalizeProduct(data) };
     } catch (error) {
-      return { ok: false, code: "backend_error", message: error?.message };
+      const imageCode = error?.data?.data?.image?.code || "";
+      console.error("Product create failed", error?.status || "unknown", imageCode || "backend_error");
+      if (imageFile) {
+        return { ok: false, code: pocketBaseImageErrorCode(imageCode, error?.status), status: error?.status || 0 };
+      }
+      return { ok: false, code: "backend_error", status: error?.status || 0 };
     }
   },
 
@@ -410,7 +449,7 @@ export const pocketbaseApi = {
     if (patch.description != null) values.description = String(patch.description).trim();
     if (patch.price != null) values.price = Math.round(Number(patch.price));
     if (patch.status != null) values.status = patch.status;
-    if (patch.image === null) values.image = null;
+    if (patch.image === null) values.image = "";
     const client = await getPocketBase();
     try {
       const data = await client.collection("products").update(productId, values);
@@ -422,6 +461,57 @@ export const pocketbaseApi = {
 
   deleteProduct(productId) {
     return appSend("/api/app/delete-product", { product_id: productId });
+  },
+
+  async replaceProductVariants(productId, rows) {
+    try {
+      const client = await getPocketBase();
+      const existing = await client.collection("product_variants").getFullList({
+        filter: client.filter("product = {:id}", { id: productId }),
+      });
+      const kept = new Set();
+      for (const row of rows || []) {
+        const name = String(row.name || "").trim();
+        if (!name) continue;
+        const price = Math.round(Number(row.price));
+        if (!Number.isInteger(price) || price < 0) return { ok: false, code: "invalid_price" };
+        const body = {
+          product: productId,
+          name,
+          price,
+          sort: Math.max(0, Math.round(Number(row.sort || 0))),
+          status: row.status === "disabled" ? "disabled" : "active",
+        };
+        if (row.id) {
+          await client.collection("product_variants").update(row.id, body);
+          kept.add(row.id);
+        } else {
+          const created = await client.collection("product_variants").create(body);
+          kept.add(created.id);
+        }
+      }
+      for (const row of existing) {
+        if (!kept.has(row.id)) {
+          await client.collection("product_variants").update(row.id, { status: "disabled" });
+        }
+      }
+      return { ok: true };
+    } catch (error) {
+      console.error("Product variant save failed", error?.status || "unknown");
+      return { ok: false, code: "backend_error" };
+    }
+  },
+
+  setStoreOrdering(status) {
+    return appSend("/api/app/set-store-ordering", { status });
+  },
+
+  changeOwnPassword({ currentPassword, newPassword, confirmPassword }) {
+    return appSend("/api/app/change-own-password", {
+      current_password: currentPassword,
+      new_password: newPassword,
+      confirm_password: confirmPassword,
+    });
   },
 
   async getAdminUsers() {

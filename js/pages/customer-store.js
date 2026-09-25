@@ -6,6 +6,7 @@ import { qs } from "../nav.js";
 import { initI18n, t, storeLabel, productLabel, productDesc, categoryLabel } from "../i18n.js";
 import { escapeAttr, escapeHtml, productImageHtml } from "../html.js";
 import { schoolPickupWindowsLabel } from "../service-periods.js";
+import { activeVariants } from "../variants.js";
 import { mountImageUi } from "../image-ui.js";
 import { mountIcons } from "../icons.js";
 import { hideBackendNotice, renderBackendNotice } from "../backend-ui.js";
@@ -85,13 +86,23 @@ async function boot() {
       menuEl.innerHTML = rows
         .map((p) => {
           const sold = p.status !== "active" || storeClosed;
+          const active = sold ? [] : activeVariants(p.variants || []);
           return `
       <article class="card product">
         <div>
           ${productImageHtml(p.image, p.product_name, { previewSrc: p.image_full || p.image })}
           <h3>${escapeHtml(productLabel(p.product_id, p.product_name))}</h3>
           <div class="muted">${escapeHtml(productDesc(p.product_id, p.description))}</div>
-          <div class="price">${money(p.price)}</div>
+          <div class="price">${money(active.length ? active[0].price : p.price)}</div>
+          ${
+            active.length
+              ? `<label class="muted" for="variant-${escapeAttr(p.product_id)}">${escapeHtml(t("variant"))}</label>
+                 <select id="variant-${escapeAttr(p.product_id)}" data-variant="${escapeAttr(p.product_id)}">
+                   <option value="">${escapeHtml(t("need_variant"))}</option>
+                   ${active.map((row) => `<option value="${escapeAttr(row.variant_id || row.id)}">${escapeHtml(row.name)} ${money(row.price)}</option>`).join("")}
+                 </select>`
+              : ""
+          }
           ${sold ? `<span class="badge sold">${escapeHtml(storeClosed ? t("store_closed") : t("soldout"))}</span>` : ""}
         </div>
         <button class="btn" data-add="${escapeAttr(p.product_id)}" ${sold ? "disabled" : ""}>${escapeHtml(t("add"))}</button>
@@ -113,13 +124,14 @@ async function boot() {
       const btn = e.target.closest("[data-add]");
       if (!btn || storeClosed) return;
       const product = products.find((p) => p.product_id === btn.dataset.add);
-      const result = cart.add(product, 1);
+      const variantId = menuEl.querySelector(`[data-variant="${CSS.escape(product.product_id)}"]`)?.value || "";
+      const result = cart.add({ ...product, variant_id: variantId }, 1);
       if (!result.ok && result.code === "OTHER_STORE") {
         if (confirm(t("other_store"))) {
           cart.clear();
-          cart.add(product, 1);
+          cart.add({ ...product, variant_id: variantId }, 1);
         } else return;
-      } else if (!result.ok) alert(t("invalid_items"));
+      } else if (!result.ok) alert(t(result.code === "need_variant" ? "need_variant" : "invalid_items"));
       refreshBadge();
     });
 

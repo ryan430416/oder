@@ -30,7 +30,10 @@ const retryUpload = qs("#retryUpload");
 let currentImagePath = "";
 let originalImagePath = "";
 let previewUrl = "";
+let variantRows = [];
 const gate = createInflight();
+const variantRowsEl = qs("#variantRows");
+const addVariantBtn = qs("#addVariant");
 
 mountImageUi();
 mountBell(qs("#bellHost"), "notifications.html");
@@ -55,9 +58,37 @@ function showPreview(url, alt = "") {
   mountImageUi(photoPreview);
 }
 
+function drawVariants() {
+  if (!variantRowsEl) return;
+  variantRowsEl.innerHTML = variantRows
+    .map(
+      (row, index) => `
+      <div class="row-actions" data-variant-row="${index}">
+        <input aria-label="${escapeAttr(t("variant"))}" data-v="name" value="${escapeAttr(row.name || "")}" maxlength="40" />
+        <input aria-label="${escapeAttr(t("form_price"))}" data-v="price" type="number" min="0" step="1" value="${escapeAttr(row.price ?? "")}" />
+        <input aria-label="sort" data-v="sort" type="number" min="0" step="1" value="${escapeAttr(row.sort ?? index)}" />
+        <label><input data-v="status" type="checkbox" ${row.status === "disabled" ? "" : "checked"} /> ${escapeHtml(t("listed"))}</label>
+        <button class="btn btn-ghost" type="button" data-v-remove="${index}">${escapeHtml(t("variant_disabled"))}</button>
+      </div>`
+    )
+    .join("");
+}
+
+function readVariantRows() {
+  return [...variantRowsEl.querySelectorAll("[data-variant-row]")].map((row, index) => ({
+    id: variantRows[index]?.id || "",
+    name: row.querySelector("[data-v=name]").value,
+    price: row.querySelector("[data-v=price]").value,
+    sort: row.querySelector("[data-v=sort]").value,
+    status: row.querySelector("[data-v=status]").checked ? "active" : "disabled",
+  }));
+}
+
 function resetForm() {
   form.reset();
   form.product_id.value = "";
+  variantRows = [];
+  drawVariants();
   currentImagePath = "";
   originalImagePath = "";
   clearPreviewUrl();
@@ -106,6 +137,17 @@ removePhoto.addEventListener("click", () => {
 });
 
 retryUpload.addEventListener("click", () => form.requestSubmit());
+addVariantBtn?.addEventListener("click", () => {
+  variantRows = readVariantRows();
+  variantRows.push({ id: "", name: "", price: "", sort: variantRows.length, status: "active" });
+  drawVariants();
+});
+variantRowsEl?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-v-remove]");
+  if (!button) return;
+  variantRows = readVariantRows().filter((_, index) => index !== Number(button.dataset.vRemove));
+  drawVariants();
+});
 
 async function render() {
   list.setAttribute("aria-busy", "true");
@@ -156,6 +198,7 @@ form.addEventListener("submit", async (event) => {
         file: photoInput.files[0] || null,
         currentImagePath,
         previousImagePath: originalImagePath,
+        imageRemoved: !photoInput.files[0] && Boolean(originalImagePath) && !currentImagePath,
         onProgress: (value) => (progress.value = value),
       });
     } finally {
@@ -166,6 +209,14 @@ form.addEventListener("submit", async (event) => {
       msg.textContent = t(result.code || "image_upload_failed");
       retryUpload.hidden = !["image_upload_failed", "image_network_failed", "image_compress_failed", "storage_forbidden"].includes(result.code);
       return;
+    }
+    if (result.productId) {
+      const savedVariants = await api.replaceProductVariants(result.productId, readVariantRows());
+      if (!savedVariants.ok) {
+        msg.textContent = t(savedVariants.code || "backend_error");
+        await render();
+        return;
+      }
     }
     msg.textContent = t("saved_ok");
     showToast(t("saved_ok"));
@@ -191,14 +242,18 @@ list.addEventListener("click", async (event) => {
     if (!confirm(t("confirm_delete_product", { name: product.product_name }))) return;
     deleteButton.disabled = true;
     const result = await api.deleteProduct(product.product_id);
-    if (result.ok && result.deleted && result.image_path) {
+    if (!result.ok) {
+      deleteButton.disabled = false;
+      msg.textContent = t(result.code || "backend_error");
+      showToast(msg.textContent, "error");
+      return;
+    }
+    if (result.deleted && result.image_path) {
       await deleteProductImage(result.image_path);
     }
-    msg.textContent = result.ok
-      ? t(result.hidden ? "product_hidden_history" : "deleted_ok")
-      : t(result.code || "backend_error");
-    showToast(msg.textContent, result.ok ? "success" : "error");
-    if (result.ok && form.product_id.value === product.product_id) resetForm();
+    msg.textContent = t(result.hidden ? "product_hidden_history" : "deleted_ok");
+    showToast(msg.textContent, "success");
+    if (form.product_id.value === product.product_id) resetForm();
     await render();
     return;
   }
@@ -209,6 +264,14 @@ list.addEventListener("click", async (event) => {
   form.description.value = product.description;
   form.price.value = product.price;
   form.status.value = product.status;
+  variantRows = (product.variants || []).map((row) => ({
+    id: row.variant_id || row.id,
+    name: row.name,
+    price: row.price,
+    sort: row.sort || 0,
+    status: row.status || "active",
+  }));
+  drawVariants();
   currentImagePath = product.image_path || "";
   originalImagePath = currentImagePath;
   showPreview(product.image, product.product_name);
